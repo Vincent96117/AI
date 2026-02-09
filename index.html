@@ -2,31 +2,32 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.6 - IRON SOUL</title>
+    <title>TRIDENT V6.7 - ABSOLUTE</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 15px; margin: 0; }
-        .header { background: #111; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 10px; }
-        .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; font-size: 0.7rem; background: #0a0a0a; padding: 10px; border-radius: 8px; border: 1px solid #222; }
-        #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 15px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 15px; border-top: 3px solid #222; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 10px; margin: 0; }
+        .header { background: #111; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #333; margin-bottom: 10px; }
+        .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; font-size: 0.7rem; background: #0a0a0a; padding: 8px; border-radius: 8px; border: 1px solid #222; }
+        #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 12px; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 12px; padding: 15px; position: relative; }
         .symbol { font-size: 1.8rem; font-weight: 900; color: var(--accent); }
-        .funding { font-family: monospace; font-size: 0.75rem; padding: 3px 7px; border-radius: 4px; border: 1px solid #333; }
+        .funding { font-family: monospace; font-size: 0.8rem; padding: 3px 7px; border-radius: 4px; border: 1px solid #333; }
         .alert-purple { background: var(--purple) !important; color: white !important; box-shadow: 0 0 15px var(--purple); border: none !important; }
         .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .item { background: #111; padding: 8px; border-radius: 6px; text-align: center; border: 1px solid #222; }
         .val { font-size: 0.95rem; font-weight: bold; font-family: monospace; color: #fff; }
-        .ai-box { background: #000; color: var(--accent); padding: 10px; border-radius: 8px; font-size: 0.8rem; border-left: 3px solid var(--accent); min-height: 80px; white-space: pre-wrap; border: 1px solid #222; line-height: 1.4; }
+        .ai-box { background: #000; color: var(--accent); padding: 10px; border-radius: 8px; font-size: 0.8rem; border-left: 3px solid var(--accent); min-height: 80px; border: 1px solid #222; line-height: 1.4; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">IRON SOUL</span></h1></div>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">ABSOLUTE STABILITY</span></h1></div>
     <div class="dashboard">
-        <div>📡 L3 穩定流</div>
+        <div><span class="status-dot" style="background:#00ffcc"></span>L3 WSS 監控中</div>
         <div>🟣 資費警戒: ±0.05% [cite: 2026-01-11]</div>
-        <div>🚫 黑名單: 已啟用 [cite: 2026-01-12]</div>
-        <div>📲 推送密鑰: 已注入 [cite: 2026-01-21]</div>
+        <div>🚫 已排除 BTC/ETH 等 [cite: 2026-01-12]</div>
+        <div>📲 Pushover 已就緒 [cite: 2026-01-21]</div>
     </div>
     <div id="sniper-deck"></div>
 
@@ -37,28 +38,28 @@
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
         
         let market = {};
-        let aiLock = new Set(); 
+        let isAiBusy = false; // AI 請求鎖
+        let lastAiTime = {}; // 個別幣種冷卻
 
-        function initL3() {
-            const ws = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
-            ws.onmessage = (e) => {
+        // 啟動實時 L3 行情與資費流
+        function initStreams() {
+            const wsPrice = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
+            wsPrice.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 data.forEach(t => {
                     if (!t.s.endsWith("USDT") || BLACKLIST.includes(t.s)) return;
-                    if (!market[t.s]) market[t.s] = { s: t.s, hist: [], fd: 0, oi: null };
+                    if (!market[t.s]) market[t.s] = { s: t.s, hist: [], fd: 0, oi: 0, v24h: 0 };
                     market[t.s].price = t.c;
                     market[t.s].change = t.P;
+                    market[t.s].v24h = t.q;
                     market[t.s].hist.push(parseFloat(t.c));
-                    if(market[t.s].hist.length > 20) market[t.s].hist.shift();
+                    if(market[t.s].hist.length > 25) market[t.s].hist.shift();
                 });
                 renderUI();
             };
-            ws.onclose = () => setTimeout(initL3, 2000);
-        }
 
-        function initFunding() {
-            const ws = new WebSocket("wss://fstream.binance.com/ws/!markPrice@arr@1s");
-            ws.onmessage = (e) => {
+            const wsFunding = new WebSocket("wss://fstream.binance.com/ws/!markPrice@arr@1s");
+            wsFunding.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 data.forEach(i => { if(market[i.s]) market[i.s].fd = parseFloat(i.r) * 100; });
             };
@@ -74,7 +75,7 @@
             deck.innerHTML = "";
 
             sorted.forEach(item => {
-                const slope = item.hist.length > 5 ? ((item.hist[item.hist.length-1] - item.hist[0]) / item.hist[0] * 100) : 0;
+                const slope = item.hist.length > 10 ? ((item.hist[item.hist.length-1] - item.hist[0]) / item.hist[0] * 100) : 0;
                 const isAlert = Math.abs(item.fd) >= 0.05;
 
                 const card = document.createElement('div');
@@ -86,35 +87,40 @@
                         <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.fd.toFixed(4)}%</span>
                     </div>
                     <div class="data-grid">
-                        <div class="item"><div style="font-size:0.6rem;color:#666">OI 持倉</div><div class="val">${item.oi?(item.oi/1000000).toFixed(1):'WAIT'}M</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">24H 成交</div><div class="val">${(item.v24h/1000000).toFixed(1)}M</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">24H 漲跌</div><div class="val">${item.change}%</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">狀態</div><div class="val">${aiLock.has(item.s)?'BUSY':'LIVE'}</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">隊列狀態</div><div class="val">${isAiBusy?'WAITING':'IDLE'}</div></div>
                     </div>
-                    <div class="ai-box" id="ai-${item.s}">>> 鋼鐵穩定監控中...</div>
+                    <div class="ai-box" id="ai-${item.s}">>> 數據收集中...符合條件將自動啟動隊列</div>
                 `;
                 deck.appendChild(card);
 
-                if ((isAlert || Math.abs(slope) > 0.1) && !aiLock.has(item.s)) {
-                    runDiagnosis(item, slope);
+                // 觸發診斷邏輯
+                if ((isAlert || Math.abs(slope) > 0.08) && canRunAI(item.s)) {
+                    triggerAbsoluteAI(item, slope);
                 }
             });
         }
 
-        async function runDiagnosis(item, slope) {
-            aiLock.add(item.s);
+        function canRunAI(s) {
+            const now = Date.now();
+            return !isAiBusy && (!lastAiTime[s] || now - lastAiTime[s] > 60000);
+        }
+
+        async function triggerAbsoluteAI(item, slope) {
+            isAiBusy = true; // 鎖定全局請求
+            lastAiTime[item.s] = Date.now();
+            const box = document.getElementById(`ai-${item.s}`);
+            box.innerText = ">> [隊列成功] 正在強刷 OI 並獲取診斷...";
+
             try {
-                // 1. 強刷 OI
+                // 1. 診斷前獲取實時 OI
                 const oiRes = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${item.s}`).then(r => r.json());
-                item.oi = parseFloat(oiRes.openInterest);
+                const oiVal = (parseFloat(oiRes.openInterest) / 1000000).toFixed(1);
 
-                // 2. 暴力格式化：全部轉成字串，移除所有可能報錯的小數點
-                const cleanPrice = Math.floor(item.price * 1000) / 1000;
-                const cleanSlope = slope.toFixed(2);
-                const cleanFD = item.fd.toFixed(4);
-                const cleanOI = (item.oi / 1000000).toFixed(1);
-
-                const prompt = `分析 ${item.s}: 價 ${cleanPrice}, 斜率 ${cleanSlope}, OI ${cleanOI}M, 資費 ${cleanFD}. 意圖與勝率. 繁體中文.`;
+                // 2. 構建極簡 Payload
+                const prompt = `分析 ${item.s}: 價${item.price},斜率${slope.toFixed(3)}%,OI ${oiVal}M,資費${item.fd.toFixed(4)}%. 判斷主力意圖與勝率. 繁體中文.`;
 
                 const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
@@ -122,25 +128,30 @@
                     body: JSON.stringify({
                         model: "llama3-70b-8192",
                         messages: [{role: "user", content: prompt}],
-                        temperature: 0.2
+                        temperature: 0.1
                     })
                 });
 
-                if (resp.ok) {
+                if (resp.status === 200) {
                     const data = await resp.json();
-                    const res = data.choices[0].message.content;
-                    document.getElementById(`ai-${item.s}`).innerText = ">> " + res;
-                    if(res.includes("90%") || res.includes("95%")) {
-                        fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 訊號: ${item.s}\n${res}&title=🔱 TRIDENT` });
+                    const result = data.choices[0].message.content;
+                    box.innerText = ">> " + result;
+                    
+                    if(result.includes("90%") || result.includes("95%")) {
+                        fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 實時狙擊: ${item.s}\n${result}&title=🔱 TRIDENT` });
                     }
+                } else {
+                    box.innerText = ">> 伺服器忙碌，稍後重試";
                 }
-            } catch (err) {}
-            // 延長冷卻至 45 秒，保證 Groq 不會因為頻率報錯
-            setTimeout(() => { aiLock.delete(item.s); }, 45000);
+            } catch (err) {
+                box.innerText = ">> 診斷發生異常";
+            } finally {
+                // 強制延遲 5 秒後才釋放鎖，給 API 喘息時間
+                setTimeout(() => { isAiBusy = false; }, 5000);
+            }
         }
 
-        initL3();
-        initFunding();
+        initStreams();
     </script>
 </body>
 </html>

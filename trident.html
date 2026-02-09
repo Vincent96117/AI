@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>TRIDENT V6.5 FINAL - TOP 3 SNIPER</title>
+    <style>
+        :root { --bg: #030303; --card: #0f0f0f; --accent: #00ffcc; --text: #ffffff; }
+        body { background: var(--bg); color: var(--text); font-family: 'Orbitron', sans-serif; padding: 20px; }
+        #top-sniper { display: flex; flex-direction: column; gap: 25px; max-width: 900px; margin: 0 auto; }
+        .sniper-card { background: #111; border: 2px solid #222; border-radius: 20px; padding: 30px; position: relative; transition: 0.5s; }
+        .sniper-card.active { border-color: var(--accent); box-shadow: 0 0 30px rgba(0,255,204,0.15); }
+        .symbol { font-size: 2.5rem; font-weight: 900; color: var(--accent); }
+        .timer-tag { position: absolute; top: 20px; right: 20px; padding: 5px 15px; border: 1px solid #ff3e3e; color: #ff3e3e; border-radius: 50px; font-size: 0.8rem; }
+        .data-box { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
+        .data-item { background: #1a1a1a; padding: 10px; border-radius: 10px; text-align: center; }
+        .data-item div:first-child { font-size: 0.7rem; color: #666; margin-bottom: 5px; }
+        .data-item div:last-child { font-size: 1.1rem; font-weight: bold; }
+        .ai-analysis { background: rgba(0, 255, 204, 0.03); border: 1px dashed #333; border-radius: 12px; padding: 20px; line-height: 1.8; color: #ccc; font-family: 'Inter', sans-serif; }
+        .loading-bar { text-align: center; color: var(--accent); margin-top: 40px; }
+    </style>
+</head>
+<body>
+
+    <h1 style="text-align:center; letter-spacing: 10px;">TRIDENT <span style="color:var(--accent)">V6.5</span></h1>
+    <p style="text-align:center; color:#555;">正在對全市場山寨幣進行 1M/5M 雙週期籌碼與型態透視...</p>
+
+    <div id="top-sniper">
+        <div class="loading-bar">正在同步幣安 API 並過濾主流幣中...</div>
+    </div>
+
+    <script>
+        const GROQ_KEY = "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";
+        const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
+
+        async function mainScanner() {
+            try {
+                const resp = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo');
+                const data = await resp.json();
+                const allSymbols = data.symbols
+                    .filter(s => s.quoteAsset === "USDT" && s.status === "TRADING" && !BLACKLIST.includes(s.symbol))
+                    .map(s => s.symbol);
+
+                // 隨機選取 40 隻進行深度篩選 (避開 API 頻率限制)
+                const pool = allSymbols.sort(() => 0.5 - Math.random()).slice(0, 40);
+                let screened = [];
+
+                for (let s of pool) {
+                    const [oi, klines, trades] = await Promise.all([
+                        fetch(`https://fapi.binance.com/fapi/v1/openInterestHist?symbol=${s}&period=5m&limit=12`).then(r=>r.json()),
+                        fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=5m&limit=20`).then(r=>r.json()),
+                        fetch(`https://fapi.binance.com/fapi/v1/aggTrades?symbol=${s}&limit=100`).then(r=>r.json())
+                    ]);
+
+                    const oiChg = ((oi[11].sumOpenInterest - oi[0].sumOpenInterest) / oi[0].sumOpenInterest * 100);
+                    const volRatio = parseFloat(klines[19][5]) / (klines.reduce((a,b)=>a+parseFloat(b[5]), 0)/20);
+                    
+                    let buy = 0, sell = 0;
+                    trades.forEach(t => t.m ? sell += parseFloat(t.q) : buy += parseFloat(t.q));
+                    const delta = (buy / (buy + sell) * 100);
+
+                    // 篩選邏輯：縮量 or OI 異動 or 強力掃貨
+                    if (volRatio < 0.7 || oiChg > 1 || delta > 65) {
+                        screened.push({ symbol: s, oi: oiChg, vol: volRatio, delta: delta, price: klines[19][4] });
+                    }
+                }
+
+                const top3 = screened.sort((a,b) => b.oi - a.oi).slice(0, 3);
+                render(top3);
+
+            } catch(e) { console.error(e); }
+        }
+
+        async function render(top3) {
+            const container = document.getElementById('top-sniper');
+            container.innerHTML = "";
+
+            for (let item of top3) {
+                const card = document.createElement('div');
+                card.className = 'sniper-card active';
+                card.innerHTML = `
+                    <div class="timer-tag" id="t-${item.symbol}">計算倒數中...</div>
+                    <div class="symbol">${item.symbol}</div>
+                    <div class="data-box">
+                        <div class="data-item"><div>OI 變化(1H)</div><div style="color:#00ffcc">${item.oi.toFixed(2)}%</div></div>
+                        <div class="data-item"><div>量縮程度</div><div style="color:${item.vol < 0.6 ? '#ff3e3e':'#fff'}">${(item.vol*100).toFixed(0)}%</div></div>
+                        <div class="data-item"><div>主動買入</div><div style="color:#00ffcc">${item.delta.toFixed(1)}%</div></div>
+                        <div class="data-item"><div>當前價格</div><div>$${parseFloat(item.price)}</div></div>
+                    </div>
+                    <div class="ai-analysis" id="ai-${item.symbol}">> 正在啟動 Llama-3-70B 進行型態與變盤倒數分析...</div>
+                `;
+                container.appendChild(card);
+                askAI(item);
+            }
+        }
+
+        async function askAI(item) {
+            const [k1, k5] = await Promise.all([
+                fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${item.symbol}&interval=1m&limit=60`).then(r=>r.json()),
+                fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${item.symbol}&interval=5m&limit=60`).then(r=>r.json())
+            ]);
+
+            const prompt = `你是專業加密貨幣狙擊手。請分析 ${item.symbol}：
+            [數據]：1H OI 變化 ${item.oi.toFixed(2)}%，成交量僅平均值 ${(item.vol*100).toFixed(0)}%，主動買入 Delta ${item.delta.toFixed(1)}%。
+            [序列]：1M 價格 ${JSON.stringify(k1.map(k=>k[4]))}, 5M 價格 ${JSON.stringify(k5.map(k=>k[4]))}。
+            
+            請嚴格執行：
+            1. 識別型態（如：VCP量縮、收斂三角形、底底高蓄勢、旗形）。
+            2. 判斷是否有「主力潛伏」跡象（量縮價穩 + OI上升）。
+            3. 精確給出：預計幾分鐘內表態噴發？
+            4. 表態方向機率與預期勝率。
+            請用繁體中文，語氣冷酷專業，直接給結論，不准說廢話。`;
+
+            const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ model: "llama3-70b-8192", messages: [{role: "user", content: prompt}], temperature: 0.1 })
+            });
+            const d = await resp.json();
+            const res = d.choices[0].message.content;
+            document.getElementById(`ai-${item.symbol}`).innerText = res;
+            
+            // 自動提取分鐘
+            const m = res.match(/\d+/);
+            if(m) document.getElementById(`t-${item.symbol}`).innerText = `預計 ${m[0]} 分鐘內表態`;
+        }
+
+        mainScanner();
+        setInterval(mainScanner, 120000); // 2分鐘掃描一次
+    </script>
+</body>
+</html>

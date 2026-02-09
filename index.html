@@ -2,21 +2,21 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V8.8 - STRUCTURE FIXED</title>
+    <title>🔱 TRIDENT V9.0 - FINAL</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 10px; margin: 0; }
         .header { background: #111; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 10px; }
         #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 15px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 18px; border-top: 3px solid #333; transition: 0.3s; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 18px; border-top: 3px solid #333; }
         .symbol { font-size: 1.8rem; font-weight: 900; color: var(--accent); }
         .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 8px; border-radius: 5px; border: 1px solid #333; }
         .alert-purple { background: var(--purple) !important; color: white !important; box-shadow: 0 0 15px var(--purple); border: none; }
-        .ai-box { background: #000; color: var(--accent); padding: 12px; border-radius: 10px; font-size: 0.85rem; border-left: 4px solid var(--accent); min-height: 110px; border: 1px solid #222; white-space: pre-wrap; line-height: 1.6; }
+        .ai-box { background: #000; color: var(--accent); padding: 12px; border-radius: 10px; font-size: 0.85rem; border-left: 4px solid var(--accent); min-height: 120px; border: 1px solid #222; white-space: pre-wrap; line-height: 1.6; }
     </style>
 </head>
 <body>
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V8.8 FIX</span></h1></div>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V9.0 DIRECTION</span></h1></div>
     <div id="sniper-deck"></div>
 
     <script>
@@ -71,73 +71,58 @@
                         <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.fd.toFixed(4)}%</span>
                     </div>
                     <div style="margin:10px 0; font-size:0.9rem;">現價: ${item.price} | 24H: ${item.change}%</div>
-                    <div class="ai-box" id="ai-${item.s}">>> 數據收集中...</div>
+                    <div class="ai-box" id="ai-${item.s}">>> 等待觸發門檻...</div>
                 `;
                 deck.appendChild(card);
 
                 const slope = item.hist.length > 10 ? ((item.hist[item.hist.length-1] - item.hist[0]) / item.hist[0] * 100) : 0;
                 if ((isAlert || Math.abs(slope) > 0.1) && !isAiBusy && (!lastAiTime[item.s] || Date.now() - lastAiTime[item.s] > 60000)) {
-                    runFixAI(item, slope);
+                    runFinalAI(item, slope);
                 }
             });
         }
 
-        async function runFixAI(item, slope) {
+        async function runFinalAI(item, slope) {
             isAiBusy = true;
             lastAiTime[item.s] = Date.now();
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [連線成功] 正在進行 K 線意圖診斷...";
+            box.innerText = ">> [時空定向分析中] 判斷方向與表態時間...";
 
             try {
                 const oiRes = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${item.s}`).then(r => r.json());
                 const oiVal = (parseFloat(oiRes.openInterest) / 1000000).toFixed(1) + "M";
                 const priceSeries = item.hist.join(",");
 
-                // 修正後的 Groq 請求結構 (解決 400 錯誤)
                 const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
-                    headers: { 
-                        "Authorization": "Bearer " + GROQ_KEY, 
-                        "Content-Type": "application/json" 
-                    },
+                    headers: { "Authorization": "Bearer " + GROQ_KEY, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-70b-8192",
                         messages: [
-                            { 
-                                role: "user", 
-                                content: `你是K線大師。標的:${item.s}, 價格點:[${priceSeries}], OI:${oiVal}, 資費:${item.fd.toFixed(4)}%. 簡述意圖與勝率。繁中。` 
-                            }
+                            { role: "user", content: `你是狙擊手。標的:${item.s}, 走勢:[${priceSeries}], OI:${oiVal}, 資費:${item.fd.toFixed(4)}%。請回報：1.明確方向(多/空) 2.預計多久表態 3.主力意圖 4.勝率%。繁中。` }
                         ],
-                        temperature: 0.2
+                        temperature: 0.1
                     })
                 });
 
                 const data = await response.json();
-                if (data.choices && data.choices[0]) {
-                    const result = data.choices[0].message.content;
-                    box.innerText = ">> " + result;
+                const result = data.choices[0].message.content;
+                box.innerText = ">> " + result;
 
-                    if (result.includes("90") || result.includes("勝率高")) {
-                        sendPushover(result, item.s);
-                    }
-                } else {
-                    box.innerText = ">> 回應結構異常";
+                if (result.includes("90") || result.includes("高勝率")) {
+                    sendPushover(result, item.s);
                 }
-            } catch (err) {
-                box.innerText = "❌ 請求失敗，請確認外掛已點亮。";
-            } finally {
-                setTimeout(() => { isAiBusy = false; }, 8000);
-            }
+            } catch (err) { box.innerText = "❌ 請求失敗，請確認橘色外掛為 ON。"; }
+            finally { setTimeout(() => { isAiBusy = false; }, 8000); }
         }
 
         function sendPushover(msg, symbol) {
             fetch("https://api.pushover.net/1/messages.json", {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=🔱 TRIDENT:${symbol}`
+                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=🔱 定向訊號:${symbol}`
             });
         }
-
         init();
     </script>
 </body>

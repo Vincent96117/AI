@@ -4,9 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>TRIDENT V7 - Anomaly Scanner (Front-end Only)</title>
+  <link rel="icon" href="data:,">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background _\u200b_ : 0; background:#050505; color:#d4d4d8; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+    body { background:#050505; color:#d4d4d8; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
     .card { background:#0f0f11; border:1px solid #1f1f23; }
     .pill { border:1px solid #2a2a31; background:#0b0b0d; }
     .ok { color:#22c55e; }
@@ -16,12 +17,14 @@
   </style>
 </head>
 <body class="p-4">
+
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-4">
     <div class="flex items-center gap-3">
       <span id="hb" class="inline-block w-2 h-2 rounded-full bg-zinc-600"></span>
       <div>
         <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-red-500">V7</span></div>
-        <div class="text-[11px] muted">Anomaly-first scanner → Top5 → Gemini JSON</div>
+        <div class="text-[11px] muted">Anomaly-first scanner → Top5 → Gemini JSON (Top3 only)</div>
+        <div id="status" class="text-[11px] muted mono mt-1">status: -</div>
       </div>
     </div>
 
@@ -34,8 +37,11 @@
       </div>
 
       <div class="flex gap-2 items-center">
+        <button id="testGeminiBtn" class="px-3 py-2 rounded text-[12px] font-bold bg-emerald-700 hover:bg-emerald-600 text-white">
+          Test Gemini
+        </button>
         <button id="analyzeBtn" class="px-3 py-2 rounded text-[12px] font-black bg-blue-600 hover:bg-blue-500 text-white">
-          Analyze Top5 (Gemini)
+          Analyze Top (Gemini)
         </button>
         <button id="resetBtn" class="px-3 py-2 rounded text-[12px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-700 hover:bg-zinc-800">
           RESET
@@ -56,7 +62,7 @@
     <div class="card rounded-lg p-4">
       <div class="flex items-center justify-between mb-3">
         <div class="text-white font-black">Gemini Output (JSON)</div>
-        <div class="text-[11px] muted">模型：<span id="modelName">gemini-2.5-flash</span></div>
+        <div class="text-[11px] muted">模型：<span id="modelName">-</span> | max_out=<span id="maxOut">-</span></div>
       </div>
       <div id="geminiOut" class="flex flex-col gap-3"></div>
     </div>
@@ -64,41 +70,57 @@
 
 <script>
 /**
- * Data sources used:
- * - WS: wss://fstream.binance.com/ws/!markPrice@arr  (3000ms)  // mark price + index + funding rate :contentReference[oaicite:5]{index=5}
- * - WS (candidates): wss://fstream.binance.com/stream?streams=<sym>@kline_5m/... // kline includes v & V :contentReference[oaicite:6]{index=6}
- * - REST (candidates / throttled): /futures/data/openInterestHist (5m,4h) with rate limit 1000/5min :contentReference[oaicite:7]{index=7}
- * - Gemini REST: POST https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent with x-goog-api-key :contentReference[oaicite:8]{index=8}
+ * WS:
+ * - wss://fstream.binance.com/ws/!markPrice@arr  (3000ms)
+ * - wss://fstream.binance.com/stream?streams=<sym>@kline_5m/...
+ * REST (throttled):
+ * - https://fapi.binance.com/futures/data/openInterestHist?symbol=...&period=5m|4h
+ * Gemini REST:
+ * - https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent  (x-goog-api-key)
  */
 
 // ===================== Config =====================
 const CFG = {
   EXCLUDE: new Set(['BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT','BNBUSDT','BNXUSDT']),
-  // 5m window with 3s ticks -> 100 points
+
   TICK_MS: 3000,
-  WIN_5M_POINTS: 100,
-  // 4h history sampled 1 min -> 240 points
-  HIST_4H_POINTS: 240,
+  WIN_5M_POINTS: 100,      // 5m with 3s ticks
+  HIST_4H_POINTS: 240,     // 4h with 1-min samples
 
   // Candidate selection (anomaly-first)
-  VOL_Z_TH: 2.6,              // 波動率異常門檻 (robust z)
-  FUND_Z_TH: 1.8,             // 資金/溢價斜率異常門檻 (robust z)
-  CANDIDATE_MAX: 40,          // kline 訂閱上限
-  OI_CHECK_MAX: 12,           // 每輪最多抓 OI 的幣數（節流）
-  OI_REFRESH_MS: 60_000,      // 每幣 OI 最快更新頻率
+  VOL_Z_TH: 1.8,           // 先放寬，較快出 Top5
+  FUND_Z_TH: 1.2,
+  CANDIDATE_MAX: 40,
 
-  // Anti-pump / continuation prefilter (你第5點：先用硬條件卡掉“噴太高”)
-  MAX_RET_5M_PCT: 0.9,        // 5分鐘漲跌幅上限（%）
-  MAX_ABS_PREMIUM_PCT: 0.25,  // |(mark-index)/index| 上限（%）避免 basis 已極端
-  MAX_RANGE_Z: 2.5,           // 最後一根 5m range 不要過度極端
+  // OI throttling
+  OI_CHECK_MAX: 12,
+  OI_REFRESH_MS: 60_000,
 
-  // Scoring weights (只用來選 Top5，真正多空/勝率交給 Gemini)
+  // Anti-pump / continuation-ish guard
+  MAX_RET_5M_PCT: 0.9,
+  MAX_ABS_PREMIUM_PCT: 0.25,
+  MAX_RANGE_Z: 2.5,
+
+  // Scoring weights (only for picking Top5)
   W_VOLZ: 1.5,
   W_FUNDZ: 0.8,
   W_VOL5MZ: 0.7,
   W_IMB5M: 1.0,
   W_OI5MZ: 0.6,
   W_ALIGN: 0.6,
+
+  // Gemini cost-control
+  GEMINI_MODELF: {
+    MODEL: "gemini-2.5-flash",
+    TOPK: 3,                 // ✅ 只分析 Top5 中最高分的前 2~3 支（改這裡）
+    MAX_OUTPUT_TOKENS: 400,   // ✅ 限制輸出長度
+    TEMP: 0.2,
+    AUTO_INTERVAL_MS: 120000, // ✅ 每2分鐘最多跑一次
+    AUTO_CHECK_MS: 30000,
+  },
+
+  // Robust Z warmup
+  ROBUST_MIN_HIST: 6,       // ✅ 6分鐘後就能動（原本20）
 };
 
 // ===================== Utils =====================
@@ -134,13 +156,12 @@ function mad(arr, med){
 }
 function robustZ(x, hist){
   // z = (x - median) / (1.4826*MAD)
-  if (!hist || hist.length < 20) return null;
+  if (!hist || hist.length < CFG.ROBUST_MIN_HIST) return null;
   const med = median(hist);
   const m = mad(hist, med) || 1e-12;
   return (x - med) / (1.4826*m);
 }
 function linSlope(y){
-  // slope of y(t) for equally spaced t = 0..n-1
   const n = y.length;
   if (n < 10) return 0;
   let sx=0, sy=0, sxx=0, sxy=0;
@@ -164,14 +185,17 @@ function sign(x, eps=1e-6){
   if (x < -eps) return -1;
   return 0;
 }
+function escapeHtml(s){
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+}
 
 // ===================== State =====================
 const S = new Map(); // symbol -> state
 let wsMark = null;
 let wsKline = null;
-let symbolsAll = [];         // universe
-let candidates = [];         // anomaly candidates (max 40)
-let top5 = [];               // final 5
+let symbolsAll = [];
+let candidates = [];
+let top5 = [];
 let lastHeartbeat = 0;
 let lastCandidateHash = "";
 let lastTop5At = 0;
@@ -198,7 +222,7 @@ function stOf(sym){
     ret5mPct: null,
 
     // kline 5m (only for candidates)
-    k5Bars: [],              // closed bars (most recent last)
+    k5Bars: [],              // closed bars
     vol5Hist: new Ring(48),
     imb5Hist: new Ring(48),
     rangeHist: new Ring(48),
@@ -213,14 +237,17 @@ function stOf(sym){
     // scoring
     dirHint: 0,
     score: null,
+
+    // local pattern tags
+    patternTags: [],
+    levels: { swingHigh: null, swingLow: null, mid: null },
   };
   S.set(sym, st);
   return st;
 }
 
-// ===================== Binance Universe =====================
+// ===================== Universe =====================
 async function loadUniverse(){
-  // 全市場 USDT 永續：用 exchangeInfo 一次拿到（你也可以沿用自己的排除清單）
   const ex = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo').then(r=>r.json());
   const list = (ex.symbols || [])
     .filter(x => x.status === 'TRADING' && x.contractType === 'PERPETUAL' && x.quoteAsset === 'USDT')
@@ -229,11 +256,10 @@ async function loadUniverse(){
   symbolsAll = list;
 }
 
-// ===================== MarkPrice All Market Stream =====================
+// ===================== Mark stream =====================
 function connectMark(){
   if (wsMark) try{ wsMark.close(); }catch(_){}
-  wsMark = new WebSocket('wss://fstream.binance.com/ws/!markPrice@arr'); // 3000ms :contentReference[oaicite:9]{index=9}
-
+  wsMark = new WebSocket('wss://fstream.binance.com/ws/!markPrice@arr'); // 3000ms
   wsMark.onopen = () => { lastHeartbeat = Date.now(); };
   wsMark.onmessage = (ev) => {
     lastHeartbeat = Date.now();
@@ -257,17 +283,16 @@ function connectMark(){
       st.lastT = u.T ?? st.lastT;
 
       if (st.lastP && st.lastI){
-        const prem = (st.lastP - st.lastI) / st.lastI; // fraction
+        const prem = (st.lastP - st.lastI) / st.lastI;
         st.premRing.push(prem);
       }
     }
   };
-
-  wsMark.onclose = () => { /* auto reconnect */ setTimeout(connectMark, 2000); };
+  wsMark.onclose = () => setTimeout(connectMark, 2000);
   wsMark.onerror = () => { try{ wsMark.close(); }catch(_){} };
 }
 
-// ===================== Metrics Sampling (every 1s, but samples into hist every 60s) =====================
+// ===================== Sampling =====================
 function sampleMetrics(){
   const now = Date.now();
   for (const sym of symbolsAll){
@@ -278,44 +303,37 @@ function sampleMetrics(){
     let sum = 0, sumsq = 0;
     for (const r of rets){ sum += r; sumsq += r*r; }
 
-    st.ret5mPct = (Math.exp(sum) - 1) * 100;  // %
-    st.rv5m = Math.sqrt(sumsq) * 100;         // scaled for readability
+    st.ret5mPct = (Math.exp(sum) - 1) * 100;
+    st.rv5m = Math.sqrt(sumsq) * 100;
+
     const premNow = st.premRing.last();
-    st.premNow = premNow * 100;              // %
+    st.premNow = premNow * 100;
 
-    // slope of premium series
-    const premSeries = st.premRing.values(); // fraction
-    st.premSlope = linSlope(premSeries) * 1e4; // scale
+    const premSeries = st.premRing.values();
+    st.premSlope = linSlope(premSeries) * 1e4;
 
-    // push to 4h hist once per minute per symbol
     if (!st.lastSampleAt || (now - st.lastSampleAt >= 60_000)){
       st.rvHist.push(st.rv5m);
       st.premSlopeHist.push(st.premSlope);
       st.lastSampleAt = now;
     }
 
-    const rvHistArr = st.rvHist.values();
-    const psHistArr = st.premSlopeHist.values();
-    st.volZ = robustZ(st.rv5m, rvHistArr);
-    st.fundZ = robustZ(st.premSlope, psHistArr);
+    st.volZ = robustZ(st.rv5m, st.rvHist.values());
+    st.fundZ = robustZ(st.premSlope, st.premSlopeHist.values());
   }
 }
 
-// ===================== Candidate selection (anomaly-first) =====================
+// ===================== Candidates =====================
 function computeCandidates(){
   const arr = [];
   for (const sym of symbolsAll){
     const st = stOf(sym);
     if (st.volZ === null) continue;
 
-    // 1) 波動率異常第一關（跟自己比）
-    const volPass = Math.abs(st.volZ) >= CFG.VOL_Z_TH;
-
-    // 2) anti-pump（先用 5m 漲跌幅 + premium 避免已噴）
-    const retPass = (st.ret5mPct !== null) && (Math.abs(st.ret5mPct) <= CFG.MAX_RET_5M_PCT);
+    const volPass  = Math.abs(st.volZ) >= CFG.VOL_Z_TH;
+    const retPass  = (st.ret5mPct !== null) && (Math.abs(st.ret5mPct) <= CFG.MAX_RET_5M_PCT);
     const premPass = (st.premNow !== null) && (Math.abs(st.premNow) <= CFG.MAX_ABS_PREMIUM_PCT);
 
-    // 3) 資金/溢價斜率異常（可當加分或二次門檻）
     const fundPass = (st.fundZ !== null) ? (Math.abs(st.fundZ) >= CFG.FUND_Z_TH) : false;
 
     if (!volPass || !retPass || !premPass) continue;
@@ -323,12 +341,11 @@ function computeCandidates(){
     const preScore = Math.abs(st.volZ) + 0.6*(Math.abs(st.fundZ || 0)) + (fundPass ? 0.4 : 0);
     arr.push({ sym, preScore });
   }
-
   arr.sort((a,b)=>b.preScore - a.preScore);
   candidates = arr.slice(0, CFG.CANDIDATE_MAX).map(x=>x.sym);
 }
 
-// ===================== Kline 5m subscription for candidates =====================
+// ===================== Kline subscription =====================
 function connectKlineForCandidates(){
   const hash = candidates.join('|');
   if (hash === lastCandidateHash) return;
@@ -338,7 +355,7 @@ function connectKlineForCandidates(){
   if (!candidates.length) return;
 
   const streams = candidates.map(s => `${s.toLowerCase()}@kline_5m`);
-  const url = `wss://fstream.binance.com/stream?streams=${streams.join('/')}`; // combined streams :contentReference[oaicite:10]{index=10}
+  const url = `wss://fstream.binance.com/stream?streams=${streams.join('/')}`;
   wsKline = new WebSocket(url);
 
   wsKline.onmessage = (ev) => {
@@ -347,12 +364,12 @@ function connectKlineForCandidates(){
     if (!data || data.e !== 'kline') return;
     const sym = data.s;
     const k = data.k;
-    if (!k || !k.x) return; // only closed 5m candle :contentReference[oaicite:11]{index=11}
+    if (!k || !k.x) return; // only closed 5m candle
 
     const st = stOf(sym);
     const o = Number(k.o), h = Number(k.h), l = Number(k.l), c = Number(k.c);
-    const v = Number(k.v);            // base volume
-    const V = Number(k.V);            // taker buy base volume :contentReference[oaicite:12]{index=12}
+    const v = Number(k.v);
+    const V = Number(k.V); // taker buy base volume
 
     const imb = (v > 0) ? ((2*V - v) / v) : 0;  // [-1,1]
     const range = (c > 0) ? ((h - l) / c) : 0;
@@ -361,12 +378,12 @@ function connectKlineForCandidates(){
     st.imb5Hist.push(imb);
     st.rangeHist.push(range);
 
-    st.k5Bars.push({ t:k.T, o,h,l,c,v,V });
-    if (st.k5Bars.length > 60) st.k5Bars.shift();
+    st.k5Bars.push({ t:k.T, o,h,l,c,v,V, imb, range });
+    if (st.k5Bars.length > 80) st.k5Bars.shift();
 
-    // derived
     st.imb5m = imb;
-    // volume-weighted 4h imbalance
+
+    // VW imbalance over 4h (last 48 bars)
     const vols = st.vol5Hist.values();
     const imbs = st.imb5Hist.values();
     let wSum=0, vSum=0;
@@ -379,19 +396,21 @@ function connectKlineForCandidates(){
 
     st.vol5mZ = robustZ(v, st.vol5Hist.values());
     st.rangeZ = robustZ(range, st.rangeHist.values());
+
+    // Update local patterns / levels
+    computeLocalPattern(st);
   };
 
-  wsKline.onclose = () => { setTimeout(connectKlineForCandidates, 1500); };
+  wsKline.onclose = () => setTimeout(connectKlineForCandidates, 1500);
   wsKline.onerror = () => { try{ wsKline.close(); }catch(_){} };
 }
 
-// ===================== OI fetch (throttled) =====================
+// ===================== OI (throttled) =====================
 async function fetchOI(sym){
   const st = stOf(sym);
   const now = Date.now();
   if (now - st.oi.ts < CFG.OI_REFRESH_MS) return;
 
-  // 5m: get 50 points -> compute last delta and zscore versus past deltas
   const url5 = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=5m&limit=50`;
   const url4 = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=4h&limit=2`;
   const [d5, d4] = await Promise.all([
@@ -401,10 +420,8 @@ async function fetchOI(sym){
 
   function sortByTs(a){ return (a||[]).slice().sort((x,y)=>(x.timestamp||0)-(y.timestamp||0)); }
 
-  // docs: openInterestHist returns last ~1 month, rate limit 1000/5min :contentReference[oaicite:13]{index=13}
   const a5 = sortByTs(d5);
   if (a5.length >= 10){
-    // choose sumOpenInterestValue if present, fallback sumOpenInterest
     const series = a5.map(x => Number(x.sumOpenInterestValue ?? x.sumOpenInterest));
     const diffs = [];
     for (let i=1;i<series.length;i++) diffs.push(series[i] - series[i-1]);
@@ -425,7 +442,6 @@ async function fetchOI(sym){
 }
 
 async function refreshOIForStrongOnes(){
-  // pick strongest by pre-score-ish: abs(volZ)+abs(fundZ)+abs(vol5mZ)+abs(imb5m)
   const scored = candidates.map(sym=>{
     const st = stOf(sym);
     const s = Math.abs(st.volZ||0) + 0.7*Math.abs(st.fundZ||0) + 0.5*Math.abs(st.vol5mZ||0) + 0.7*Math.abs(st.imb5m||0);
@@ -444,17 +460,13 @@ function computeTop5(){
     const st = stOf(sym);
     if (st.volZ===null) continue;
 
-    // continuation-ish guard: range should not be extreme
     const rangeOk = (st.rangeZ===null) ? true : (Math.abs(st.rangeZ) <= CFG.MAX_RANGE_Z);
 
-    // direction hint (for Gemini prompt)
     const d = sign(st.imb5m || 0, 0.03);
     st.dirHint = d;
 
-    // alignment bonus: imb direction & premSlope direction
     const align = (d !== 0 && sign(st.premSlope||0, 0.0001) === d) ? 1 : 0;
 
-    // scoring (only for selecting 5)
     let score =
       CFG.W_VOLZ  * Math.abs(st.volZ || 0) +
       CFG.W_FUNDZ * Math.abs(st.fundZ || 0) +
@@ -463,7 +475,6 @@ function computeTop5(){
       CFG.W_OI5MZ * Math.abs(st.oi.oi5mZ || 0) +
       CFG.W_ALIGN * align;
 
-    // penalties
     if (!rangeOk) score -= 0.8;
     if (st.ret5mPct!==null && Math.abs(st.ret5mPct) > CFG.MAX_RET_5M_PCT) score -= 1.2;
 
@@ -472,13 +483,89 @@ function computeTop5(){
   }
   arr.sort((a,b)=>b.score-a.score);
   top5 = arr.slice(0,5).map(x=>x.sym);
+
   lastTop5At = Date.now();
   document.getElementById('lastUpdate').innerText = new Date(lastTop5At).toLocaleTimeString();
 }
 
+// ===================== Local pattern detection (front-end) =====================
+function computeLocalPattern(st){
+  const bars = st.k5Bars;
+  if (bars.length < 3) { st.patternTags = []; return; }
+  const last = bars[bars.length-1];
+  const prev = bars[bars.length-2];
+  const prev2 = bars[bars.length-3];
+
+  const tags = [];
+
+  const body = Math.abs(last.c - last.o);
+  const range = Math.max(1e-12, last.h - last.l);
+  const bodyPct = body / range;
+
+  const upperWick = last.h - Math.max(last.o, last.c);
+  const lowerWick = Math.min(last.o, last.c) - last.l;
+
+  // basic candle tags
+  if (bodyPct < 0.2) tags.push("doji-ish");
+  if (lowerWick > 2*body && upperWick < body) tags.push("hammer-ish");
+  if (upperWick > 2*body && lowerWick < body) tags.push("shootingstar-ish");
+
+  // inside bar
+  if (last.h < prev.h && last.l > prev.l) tags.push("inside-bar");
+
+  // engulfing
+  const lastBull = last.c > last.o;
+  const prevBull = prev.c > prev.o;
+  const lastBodyHi = Math.max(last.o, last.c);
+  const lastBodyLo = Math.min(last.o, last.c);
+  const prevBodyHi = Math.max(prev.o, prev.c);
+  const prevBodyLo = Math.min(prev.o, prev.c);
+
+  if (lastBull && !prevBull && lastBodyHi >= prevBodyHi && lastBodyLo <= prevBodyLo) tags.push("bull-engulf");
+  if (!lastBull && prevBull && lastBodyHi >= prevBodyHi && lastBodyLo <= prevBodyLo) tags.push("bear-engulf");
+
+  // range contraction (squeeze-ish)
+  const rArr = st.rangeHist.values();
+  if (rArr.length >= 20){
+    const medR = median(rArr);
+    if (last.range < 0.75*medR) tags.push("range-compress");
+    if (last.range > 1.6*medR) tags.push("range-expand");
+  }
+
+  // vol spike
+  const vArr = st.vol5Hist.values();
+  if (vArr.length >= 20){
+    const medV = median(vArr);
+    if (last.v > 1.8*medV) tags.push("vol-spike");
+    if (last.v < 0.6*medV) tags.push("vol-dry");
+  }
+
+  // imbalance persistence
+  if (Math.sign(prev2.imb) === Math.sign(prev.imb) && Math.sign(prev.imb) === Math.sign(last.imb) && Math.abs(last.imb) > 0.08){
+    tags.push("imb-3bars");
+  }
+
+  // simple 5m micro-trend (last 6 closes)
+  const closes = bars.slice(-6).map(b=>b.c);
+  const slope = linSlope(closes);
+  if (slope > 0) tags.push("microtrend-up");
+  if (slope < 0) tags.push("microtrend-down");
+
+  // swing levels (last 20 bars)
+  const seg = bars.slice(-20);
+  const swingHigh = Math.max(...seg.map(b=>b.h));
+  const swingLow  = Math.min(...seg.map(b=>b.l));
+  st.levels.swingHigh = swingHigh;
+  st.levels.swingLow = swingLow;
+  st.levels.mid = (swingHigh + swingLow)/2;
+
+  st.patternTags = tags;
+}
+
 // ===================== Gemini =====================
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = CFG.GEMINIF.MODEL;
 document.getElementById('modelName').innerText = GEMINI_MODEL;
+document.getElementById('maxOut').innerText = CFG.GEMINIF.MAX_OUTPUT_TOKENS;
 
 function getGeminiKey(){
   const k = document.getElementById('geminiKey').value.trim();
@@ -495,34 +582,51 @@ function clearGeminiKey(){
   document.getElementById('geminiKey').value = "";
   alert("Cleared.");
 }
-async function fetchKlines(sym, interval, limit){
-  const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${interval}&limit=${limit}`;
-  return fetch(url).then(r=>r.json()).catch(()=>[]);
-}
 
 function buildGeminiPrompt(sym){
   const st = stOf(sym);
   const dir = st.dirHint === 1 ? "LONG" : (st.dirHint === -1 ? "SHORT" : "NEUTRAL");
-  return `
-你是「合約短線（5-10分鐘）訊號審核員」，只能根據我提供的數據判斷，不可臆測外部資訊。
-目標：判斷 ${sym} 在未來 5-10 分鐘「最可能的方向/型態」，並給出進出場（entry/stop/tp）與勝率（0-100）。
-限制：如果你覺得資料不足或信號品質低，請輸出 bias=NEUTRAL 並降低 confidence。
 
-【即時結構化指標（前端計算）】
-- direction_hint=${dir}
-- vol_z(5m RV vs past 4h robust z)=${st.volZ}
-- rv_5m_scaled=${st.rv5m}
-- ret_5m_pct=${st.ret5mPct}
-- premium_pct(mark-index)/index=${st.premNow}
-- premium_slope_scaled=${st.premSlope}
-- fund_z(premium_slope vs past 4h robust z)=${st.fundZ}
-- imb_5m=(2*V-v)/v=${st.imb5m}
-- imb_4h_vwavg=${st.imb4h}
-- vol_5m_z(self vs past 4h robust z)=${st.vol5mZ}
-- range_z(5m range self robust z)=${st.rangeZ}
-- oi_d_5m=${st.oi.dOi5m}
-- oi_z_5m(dOI5m vs past deltas robust z)=${st.oi.oi5mZ}
-- oi_d_4h(latest4h - prev4h)=${st.oi.dOi4h}
+  // compact structure summary (NO 1m/5m 30bars dump)
+  const lastBars = st.k5Bars.slice(-6).map(b => ({
+    o: +b.o, h:+b.h, l:+b.l, c:+b.c,
+    v: +b.v,
+    imb: +b.imb
+  }));
+
+  const summary = {
+    symbol: sym,
+    direction_hint: dir,
+    // anomalies
+    vol_z: st.volZ,
+    fund_z: st.fundZ,
+    vol5m_z: st.vol5mZ,
+    oi_z_5m: st.oi.oi5mZ,
+    // short-horizon guards
+    ret_5m_pct: st.ret5mPct,
+    premium_pct: st.premNow,
+    range_z: st.rangeZ,
+    // flow
+    imb_5m: st.imb5m,
+    imb_4h: st.imb4h,
+    oi_d_5m: st.oi.dOi5m,
+    oi_d_4h: st.oi.dOi4h,
+    // local patterns
+    pattern_tags: st.patternTags,
+    levels: st.levels,
+    last_price: st.lastP,
+    last_6x_5m: lastBars
+  };
+
+  return `
+你是「合約短線（5-10分鐘）訊號審核員」，只能根據我提供的摘要數據判斷，不可臆測外部資訊。
+目標：判斷 ${sym} 在未來 5-10 分鐘「最可能方向/型態」，並給出進出場（entry/stop/tp）與勝率(0-100)。
+限制：
+- 若資料不足/信號品質低，請輸出 bias=NEUTRAL 並降低 confidence。
+- 若已經“噴太高/波動過度擴張”，請避免追價，偏向 NEUTRAL 或等待回踩。
+
+【摘要數據(JSON)】
+${JSON.stringify(summary)}
 
 【你必須輸出「嚴格 JSON」，不要任何多餘文字】
 schema:
@@ -544,22 +648,14 @@ async function callGeminiFor(sym){
   const key = getGeminiKey();
   if (!key) throw new Error("Missing Gemini API key. Paste it then Save.");
 
-  // optional: pull latest candles for Gemini context (kept small)
-  const [k1, k5] = await Promise.all([
-    fetchKlines(sym, "1m", 30),
-    fetchKlines(sym, "5m", 30),
-  ]);
-
-  const st = stOf(sym);
-  const prompt = buildGeminiPrompt(sym) + "\n\n【最近K線(1m,30根)】\n" + JSON.stringify(k1) +
-                 "\n\n【最近K線(5m,30根)】\n" + JSON.stringify(k5);
-
+  const prompt = buildGeminiPrompt(sym);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: 0.2,
-      // REST supports snake_case response_mime_type for JSON mode :contentReference[oaicite:14]{index=14}
+      temperature: CFG.GEMINIF.TEMP,
+      max_output_tokens: CFG.GEMINIF.MAX_OUTPUT_TOKENS,
       response_mime_type: "application/json"
     }
   };
@@ -568,14 +664,14 @@ async function callGeminiFor(sym){
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-goog-api-key": key // :contentReference[oaicite:15]{index=15}
+      "x-goog-api-key": key
     },
     body: JSON.stringify(body)
   });
 
   if (!res.ok){
     const t = await res.text();
-    throw new Error(`Gemini HTTP ${res.status}: ${t.slice(0,200)}`);
+    throw new Error(`Gemini HTTP ${res.status}: ${t.slice(0,220)}`);
   }
 
   const json = await res.json();
@@ -583,22 +679,25 @@ async function callGeminiFor(sym){
   let out;
   try { out = JSON.parse(text); }
   catch(_){
+    const st = stOf(sym);
     out = { symbol: sym, bias:"NEUTRAL", confidence:0, pattern:"chop",
-            entry:{type:"market",price:st.lastP||0,logic:"Gemini did not return JSON."},
-            stop:{price:st.lastP||0,logic:"-"},
-            takeProfit:[], invalidation:"-", notes:[String(text).slice(0,300)] };
+      entry:{type:"market",price:st.lastP||0,logic:"Gemini did not return valid JSON."},
+      stop:{price:st.lastP||0,logic:"-"},
+      takeProfit:[], invalidation:"-", notes:[String(text).slice(0,300)] };
   }
   return out;
 }
 
 // ===================== UI render =====================
 function render(){
-  // heartbeat
   const hb = document.getElementById('hb');
   const alive = (Date.now() - lastHeartbeat) < 5000;
   hb.className = `inline-block w-2 h-2 rounded-full ${alive ? 'bg-emerald-500' : 'bg-zinc-600'}`;
 
-  // top5 cards
+  const zReady = [...S.values()].filter(x => x.volZ !== null).length;
+  document.getElementById('status').innerText =
+    `universe=${symbolsAll.length} | zReady=${zReady} | candidates=${candidates.length} | top5=${top5.length} | hbAgeMs=${Date.now()-lastHeartbeat}`;
+
   const wrap = document.getElementById('top5');
   wrap.innerHTML = "";
   for (const sym of top5){
@@ -616,6 +715,7 @@ function render(){
             score=${fmt(st.score,2)} |
             <span class="${dirCls} font-bold">${dir}</span>
           </div>
+          <div class="text-[11px] muted mono mt-1">tags=${(st.patternTags||[]).join(', ') || '-'}</div>
         </div>
         <button class="px-3 py-2 rounded text-[12px] font-black bg-zinc-800 hover:bg-zinc-700 text-white"
                 data-sym="${sym}">Gemini</button>
@@ -633,13 +733,9 @@ function render(){
         <div class="pill rounded px-2 py-1">dOI4h: <span class="text-white">${fmt(st.oi.dOi4h,2)}</span></div>
       </div>
     `;
-    row.querySelector('button').onclick = async () => {
-      await analyzeOne(sym);
-    };
+    row.querySelector('button').onclick = async () => { await analyzeOne(sym); };
     wrap.appendChild(row);
   }
-
-  // gemini outputs already rendered separately
 }
 
 function renderGemini(obj){
@@ -659,13 +755,8 @@ function renderGemini(obj){
   box.prepend(card);
 }
 
-function escapeHtml(s){
-  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
-}
-
 // ===================== Orchestration =====================
 async function tickPipeline(){
-  // candidates & top5 recompute every ~15s (fast enough for 5-10m horizon)
   computeCandidates();
   connectKlineForCandidates();
   await refreshOIForStrongOnes();
@@ -687,21 +778,26 @@ async function analyzeOne(sym){
   }
 }
 
-async function analyzeTop5(){
+async function analyzeTop(){
+  // ✅ 只分析 Top5 中最高分的前 TOPK
+  const pick = top5.slice(0, CFG.GEMINIF.TOPK);
+  if (!pick.length) return;
+
   const box = document.getElementById('geminiOut');
   const title = document.createElement('div');
   title.className = "text-[11px] muted mono";
-  title.innerText = `Gemini analyzing Top5: ${top5.join(', ')} ...`;
+  title.innerText = `Gemini analyzing Top${pick.length}: ${pick.join(', ')} ...`;
   box.prepend(title);
 
-  for (const sym of top5){
+  for (const sym of pick){
     try{
       const res = await callGeminiFor(sym);
       renderGemini(res);
     }catch(e){
+      const st = stOf(sym);
       renderGemini({symbol:sym,bias:"NEUTRAL",confidence:0,pattern:"chop",
-        entry:{type:"market",price:stOf(sym).lastP||0,logic:"Gemini error"},
-        stop:{price:stOf(sym).lastP||0,logic:"-"},
+        entry:{type:"market",price:st.lastP||0,logic:"Gemini error"},
+        stop:{price:st.lastP||0,logic:"-"},
         takeProfit:[],invalidation:"-",notes:[e.message]});
     }
   }
@@ -712,8 +808,38 @@ async function analyzeTop5(){
 document.getElementById('saveKeyBtn').onclick = saveGeminiKey;
 document.getElementById('clearKeyBtn').onclick = clearGeminiKey;
 document.getElementById('resetBtn').onclick = () => location.reload();
-document.getElementById('analyzeBtn').onclick = analyzeTop5;
+document.getElementById('analyzeBtn').onclick = analyzeTop;
 
+// Test Gemini button
+document.getElementById('testGeminiBtn').onclick = async () => {
+  try{
+    const key = getGeminiKey();
+    if(!key) return alert("先貼上 Gemini key 再測試（可按 Save 存 localStorage）");
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+    const res = await fetch(url,{
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        contents:[{role:"user",parts:[{text:`只回傳JSON：{"ok":true,"ts":${Date.now()}}`}]}],
+        generationConfig:{ temperature:0.1, max_output_tokens: 80, response_mime_type:"application/json" }
+      })
+    });
+
+    const text = await res.text();
+    console.log("Gemini test raw:", text);
+
+    if(!res.ok){
+      alert(`Gemini FAIL: HTTP ${res.status}\n(看 Console 內的回應內容)`);
+      return;
+    }
+    alert("Gemini OK ✅（看 Console 可確認回應 JSON）");
+  }catch(e){
+    alert("Gemini error: " + e.message);
+  }
+};
+
+// load key
 (function initKey(){
   const k = localStorage.getItem('GEMINI_API_KEY') || "";
   if (k) document.getElementById('geminiKey').value = k;
@@ -724,15 +850,27 @@ document.getElementById('analyzeBtn').onclick = analyzeTop5;
   await loadUniverse();
   connectMark();
 
-  // sample metrics every 1s; history sampling is internally 60s
   setInterval(sampleMetrics, 1000);
 
-  // run pipeline every 15s
+  // pipeline every 15s (fast enough for 5-10m horizon)
   setInterval(() => { tickPipeline().catch(()=>{}); }, 15_000);
 
   // render loop
   setInterval(render, 1000);
+
+  // ✅ auto Gemini: every 2 minutes max, only when key exists and top5 is ready
+  let lastAutoGeminiAt = 0;
+  setInterval(() => {
+    const key = getGeminiKey();
+    if (!key) return;
+    if (top5.length !== 5) return;
+    const now = Date.now();
+    if (now - lastAutoGeminiAt < CFG.GEMINIF.AUTO_INTERVAL_MS) return;
+    lastAutoGeminiAt = now;
+    analyzeTop();
+  }, CFG.GEMINIF.AUTO_CHECK_MS);
 })();
 </script>
 </body>
 </html>
+

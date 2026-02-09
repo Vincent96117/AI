@@ -2,16 +2,16 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V17.5 - FINAL STRIKE</title>
+    <title>🔱 TRIDENT V18.0 - FINAL</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        .card { border: 1px solid #333; padding: 15px; margin-bottom: 15px; background: #050505; border-radius: 8px; }
-        .symbol { font-size: 1.8rem; color: #00ffcc; font-weight: bold; }
-        .ai-box { background: #111; padding: 12px; color: #fff; border-left: 4px solid #0f0; margin-top: 10px; white-space: pre-wrap; min-height: 80px; }
+        .card { border: 2px solid #333; padding: 15px; margin-bottom: 15px; background: #050505; border-radius: 10px; }
+        .symbol { font-size: 2rem; color: #00ffcc; font-weight: bold; }
+        .ai-box { background: #111; padding: 15px; color: #fff; border-left: 5px solid #0f0; margin-top: 10px; font-size: 1.1rem; }
     </style>
 </head>
 <body>
-    <h2>🔱 TRIDENT V17.5 <span style="color:#4285F4">Gemini Direct</span></h2>
+    <h2>🔱 TRIDENT V18.0 | GEMINI 最後對接測試</h2>
     <div id="deck"></div>
 
     <script>
@@ -46,46 +46,44 @@
                 const isH = Math.abs(item.fd) >= 0.05;
                 const div = document.createElement("div");
                 div.className = "card";
-                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">系統掃描中...</div>`;
+                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">等待觸發...</div>`;
                 deck.appendChild(div);
-                if (isH && !busy) callGemini(item);
+                if (isH && !busy) callAI(item);
             });
         }
 
-        async function callGemini(item) {
+        function callAI(item) {
             busy = true;
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> AI 正在強行突破連線...";
+            box.innerText = ">> 正在強行突破 Google 閘道...";
 
-            try {
-                // 直接寫死整串網址，一字不差！解決 404 問題
-                const target = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GK;
+            // 暴力拼接網址，防止外掛截斷
+            const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash" + ":" + "generateContent?key=" + GK;
 
-                const response = await fetch(target, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: `你是專業交易員。標的:${item.s},資費:${item.fd.toFixed(4)}%,價格:${item.p}。請給出:1.方向(多/空) 2.多久表態(min) 3.勝率。繁體中文，結論第一行。` }] }]
-                    })
-                });
-
-                const data = await response.json();
-                if (data.error) throw new Error(data.error.message);
-
-                const res = data.candidates[0].content.parts[0].text;
-                box.innerText = ">> " + res;
-
-                if (res.includes("9") || res.includes("高")) {
-                    fetch("https://api.pushover.net/1/messages.json", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: `token=${PT}&user=${PU}&message=${encodeURIComponent(res)}&title=🔱狙擊:${item.s}`
-                    });
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", url, true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        const data = JSON.parse(xhr.responseText);
+                        const res = data.candidates[0].content.parts[0].text;
+                        box.innerText = ">> " + res;
+                        // 送出 Pushover
+                        fetch("https://api.pushover.net/1/messages.json", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                            body: `token=${PT}&user=${PU}&message=${encodeURIComponent(res)}&title=🔱狙擊:${item.s}`
+                        });
+                    } else {
+                        box.innerText = "❌ 狀態碼: " + xhr.status + " | 錯誤內容: " + xhr.responseText;
+                    }
+                    setTimeout(() => { busy = false; }, 10000);
                 }
-            } catch (err) { 
-                box.innerText = "❌ 警告: " + err.message; 
-            }
-            finally { setTimeout(() => { busy = false; }, 10000); }
+            };
+            xhr.send(JSON.stringify({
+                contents: [{ parts: [{ text: `標的:${item.s},資費:${item.fd.toFixed(4)}%,價格:${item.p}。請給出:方向、勝率、表態時間。繁體中文。` }] }]
+            }));
         }
         init();
     </script>

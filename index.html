@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V17.3 - 網址修正</title>
+    <title>🔱 TRIDENT V17.4 - AI RE-LOCKED</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
         .card { border: 1px solid #333; padding: 15px; margin-bottom: 10px; background: #050505; }
@@ -11,7 +11,7 @@
     </style>
 </head>
 <body>
-    <h2>🔱 TRIDENT V17.3 <span style="color:#4285F4">Gemini Fixed</span></h2>
+    <h2>🔱 TRIDENT V17.4 <span style="color:#4285F4">Gemini Final</span></h2>
     <div id="deck"></div>
 
     <script>
@@ -36,7 +36,7 @@
                     if (market[t.s]) {
                         market[t.s].p = t.c;
                         market[t.s].hist.push(t.c);
-                        if(market[t.s].hist.length > 10) market[t.s].hist.shift();
+                        if(market[t.s].hist.length > 5) market[t.s].hist.shift();
                     }
                 });
                 draw();
@@ -51,7 +51,7 @@
                 const isAlert = Math.abs(item.fd) >= 0.05;
                 const div = document.createElement("div");
                 div.className = "card";
-                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">準備診斷中...</div>`;
+                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">系統待命...</div>`;
                 deck.appendChild(div);
                 if (isAlert && !busy) runGemini(item);
             });
@@ -60,35 +60,40 @@
         async function runGemini(item) {
             busy = true;
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [AI 正在連線] 請求 Google 伺服器...";
+            box.innerText = ">> [AI 連線中] 正在排除 404 錯誤...";
 
-            // 修正後的精準網址
-            const apiURL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+            // 網址路徑拆解，防止被瀏覽器截斷
+            const baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash";
+            const action = ":generateContent";
+            const fullURL = `${baseURL}${action}?key=${GEMINI_KEY}`;
 
             try {
-                const response = await fetch(apiURL, {
+                const response = await fetch(fullURL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: `你是一位交易專家。標的:${item.s},資費:${item.fd}%,走勢:${item.hist.join('->')}。請分析：1.方向(多/空) 2.多久表態(min) 3.勝率。繁體中文結論。` }] }]
+                        contents: [{ parts: [{ text: `交易指令:分析標的${item.s},資費${item.fd}%,近期走勢${item.hist.join('->')}。給出:方向(多/空)、勝率、表態時間。繁中結論第一行。` }] }]
                     })
                 });
 
-                if (!response.ok) throw new Error(`HTTP錯誤: ${response.status}`);
+                if (!response.ok) {
+                    const errorMsg = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorMsg}`);
+                }
 
                 const data = await response.json();
-                const resText = data.candidates[0].content.parts[0].text;
-                box.innerText = ">> " + resText;
+                const res = data.candidates[0].content.parts[0].text;
+                box.innerText = ">> " + res;
 
-                if (resText.includes("9") || resText.includes("高")) {
+                if (res.includes("9") || res.includes("高")) {
                     fetch("https://api.pushover.net/1/messages.json", {
                         method: "POST",
                         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: `token=${PUSHOVER.t}&user=${PUSHOVER.u}&message=${encodeURIComponent(resText)}&title=🔱狙擊:${item.s}`
+                        body: `token=${PUSHOVER.t}&user=${PUSHOVER.u}&message=${encodeURIComponent(res)}&title=🔱狙擊:${item.s}`
                     });
                 }
             } catch (err) { 
-                box.innerText = "❌ 這次真的是網址出錯，我改好了！\n錯誤原因: " + err.message; 
+                box.innerText = "❌ 連線失敗: " + err.message + "\n(請檢查橘色外掛是否關閉或限制了請求)"; 
             }
             finally { setTimeout(() => { busy = false; }, 10000); }
         }

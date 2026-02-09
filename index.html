@@ -2,21 +2,22 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V17.4 - AI RE-LOCKED</title>
+    <title>🔱 TRIDENT V17.5 - FINAL STRIKE</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        .card { border: 1px solid #333; padding: 15px; margin-bottom: 10px; background: #050505; }
-        .symbol { font-size: 1.5rem; color: #00ffcc; font-weight: bold; }
-        .ai-box { background: #111; padding: 10px; color: #fff; border-left: 3px solid #00ffcc; margin-top: 10px; white-space: pre-wrap; }
+        .card { border: 1px solid #333; padding: 15px; margin-bottom: 15px; background: #050505; border-radius: 8px; }
+        .symbol { font-size: 1.8rem; color: #00ffcc; font-weight: bold; }
+        .ai-box { background: #111; padding: 12px; color: #fff; border-left: 4px solid #0f0; margin-top: 10px; white-space: pre-wrap; min-height: 80px; }
     </style>
 </head>
 <body>
-    <h2>🔱 TRIDENT V17.4 <span style="color:#4285F4">Gemini Final</span></h2>
+    <h2>🔱 TRIDENT V17.5 <span style="color:#4285F4">Gemini Direct</span></h2>
     <div id="deck"></div>
 
     <script>
-        const GEMINI_KEY = "AIzaSyCK5cMo5FL895WwRzggkFjPi0JRe5tVqXQ";
-        const PUSHOVER = { u: "Gkhqyhobnxzjfwgvaiyp347m1jkhn4", t: "acyoe3sz15x4n91r1349fdcau7x6pw" };
+        const GK = "AIzaSyCK5cMo5FL895WwRzggkFjPi0JRe5tVqXQ";
+        const PU = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
+        const PT = "acyoe3sz15x4n91r1349fdcau7x6pw";
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
 
         let market = {};
@@ -27,18 +28,12 @@
             const d = await r.json();
             d.forEach(i => {
                 if (i.symbol.endsWith("USDT") && !BLACKLIST.includes(i.symbol)) {
-                    market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate)*100, p: i.markPrice, hist: [] };
+                    market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate)*100, p: i.markPrice };
                 }
             });
             const ws = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
             ws.onmessage = (e) => {
-                JSON.parse(e.data).forEach(t => {
-                    if (market[t.s]) {
-                        market[t.s].p = t.c;
-                        market[t.s].hist.push(t.c);
-                        if(market[t.s].hist.length > 5) market[t.s].hist.shift();
-                    }
-                });
+                JSON.parse(e.data).forEach(t => { if(market[t.s]) market[t.s].p = t.c; });
                 draw();
             };
         }
@@ -48,40 +43,35 @@
             const deck = document.getElementById("deck");
             deck.innerHTML = "";
             list.forEach(item => {
-                const isAlert = Math.abs(item.fd) >= 0.05;
+                const isH = Math.abs(item.fd) >= 0.05;
                 const div = document.createElement("div");
                 div.className = "card";
-                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">系統待命...</div>`;
+                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">系統掃描中...</div>`;
                 deck.appendChild(div);
-                if (isAlert && !busy) runGemini(item);
+                if (isH && !busy) callGemini(item);
             });
         }
 
-        async function runGemini(item) {
+        async function callGemini(item) {
             busy = true;
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [AI 連線中] 正在排除 404 錯誤...";
-
-            // 網址路徑拆解，防止被瀏覽器截斷
-            const baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash";
-            const action = ":generateContent";
-            const fullURL = `${baseURL}${action}?key=${GEMINI_KEY}`;
+            box.innerText = ">> AI 正在強行突破連線...";
 
             try {
-                const response = await fetch(fullURL, {
+                // 直接寫死整串網址，一字不差！解決 404 問題
+                const target = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GK;
+
+                const response = await fetch(target, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: `交易指令:分析標的${item.s},資費${item.fd}%,近期走勢${item.hist.join('->')}。給出:方向(多/空)、勝率、表態時間。繁中結論第一行。` }] }]
+                        contents: [{ parts: [{ text: `你是專業交易員。標的:${item.s},資費:${item.fd.toFixed(4)}%,價格:${item.p}。請給出:1.方向(多/空) 2.多久表態(min) 3.勝率。繁體中文，結論第一行。` }] }]
                     })
                 });
 
-                if (!response.ok) {
-                    const errorMsg = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorMsg}`);
-                }
-
                 const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+
                 const res = data.candidates[0].content.parts[0].text;
                 box.innerText = ">> " + res;
 
@@ -89,11 +79,11 @@
                     fetch("https://api.pushover.net/1/messages.json", {
                         method: "POST",
                         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: `token=${PUSHOVER.t}&user=${PUSHOVER.u}&message=${encodeURIComponent(res)}&title=🔱狙擊:${item.s}`
+                        body: `token=${PT}&user=${PU}&message=${encodeURIComponent(res)}&title=🔱狙擊:${item.s}`
                     });
                 }
             } catch (err) { 
-                box.innerText = "❌ 連線失敗: " + err.message + "\n(請檢查橘色外掛是否關閉或限制了請求)"; 
+                box.innerText = "❌ 警告: " + err.message; 
             }
             finally { setTimeout(() => { busy = false; }, 10000); }
         }

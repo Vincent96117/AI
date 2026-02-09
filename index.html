@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.5 - FINAL REPAIR</title>
+    <title>TRIDENT V6.5 - BYPASS</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; --warn: #ff3e3e; }
         body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 15px; }
@@ -17,27 +17,20 @@
         .item { background: #151515; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #222; }
         .val { font-size: 1rem; font-weight: bold; font-family: monospace; color: #fff; }
         .ai-box { background: #000; color: var(--accent); padding: 12px; border-radius: 10px; font-size: 0.82rem; border-left: 4px solid var(--accent); min-height: 80px; white-space: pre-wrap; margin-top: 10px; }
-        .signal-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; background: #333; }
-        .active-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1 style="margin:0; letter-spacing:4px;">🔱 TRIDENT <span style="color:var(--accent)">V6.5 FINAL</span></h1>
-    </div>
-
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">BYPASS</span></h1></div>
     <div class="dashboard">
-        <div><span id="dot-wss" class="signal-dot"></span> WSS 流量：<span id="stat-wss" style="color:var(--accent)">0</span></div>
-        <div>📡 API 狀態：<span id="stat-api" style="color:var(--accent)">穩定監控</span></div>
-        <div>🚫 黑名單：<span style="color:var(--warn)">BTC, ETH 等已隔離 [cite: 2026-01-12]</span></div>
-        <div>⏳ 下次更新：<span id="stat-timer" style="color:#fff">--</span></div>
+        <div>📡 連線狀態：<span id="stat-conn" style="color:var(--accent)">嘗試中...</span></div>
+        <div>⏱️ 數據刷新：<span id="stat-timer" style="color:#fff">--</span></div>
+        <div>🚫 黑名單：<span style="color:var(--warn)">BTC, ETH 等隔離中</span></div>
+        <div>⚙️ 模式：<span id="stat-mode" style="color:var(--accent)">自動切換</span></div>
     </div>
-
     <div id="sniper-deck"></div>
 
     <script>
-        // [cite: 2026-01-21]
         const PUSHOVER_USER = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
         const PUSHOVER_TOKEN = "acyoe3sz15x4n91r1349fdcau7x6pw";
         const GROQ_KEY = "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";
@@ -45,74 +38,83 @@
         
         let market = {};
         let aiLock = false;
-        let wssCount = 0;
 
-        // 1. WebSocket 引擎 (L3 價格流)
+        // 1. WebSocket 備用地址
         function initWSS() {
-            const ws = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
+            // 換一個地址試試
+            const ws = new WebSocket("wss://fstream.binance.me/ws/!ticker@arr");
+            ws.onopen = () => document.getElementById('stat-conn').innerText = "WSS 已連通";
             ws.onmessage = (e) => {
+                document.getElementById('stat-mode').innerText = "WSS 實時流";
                 const data = JSON.parse(e.data);
-                const dot = document.getElementById('dot-wss');
-                dot.classList.add('active-dot'); setTimeout(() => dot.classList.remove('active-dot'), 100);
-                wssCount += data.length;
-
                 data.forEach(t => {
                     if (!t.s.endsWith("USDT") || BLACKLIST.includes(t.s)) return;
-                    if (!market[t.s]) market[t.s] = { symbol: t.s, history: [], volHistory: [] };
+                    if (!market[t.s]) market[t.s] = { symbol: t.s, history: [] };
                     market[t.s].price = t.c;
                     market[t.s].change = t.P;
-                    market[t.s].v = t.q; // 成交額
+                    market[t.s].v = t.q;
                     market[t.s].history.push(parseFloat(t.c));
-                    market[t.s].volHistory.push(parseFloat(t.q));
-                    if(market[t.s].history.length > 30) market[t.s].history.shift();
+                    if(market[t.s].history.length > 20) market[t.s].history.shift();
                 });
                 renderUI();
             };
-            document.getElementById('stat-wss').innerText = wssCount;
-            ws.onclose = () => setTimeout(initWSS, 5000);
+            ws.onerror = () => {
+                document.getElementById('stat-conn').innerText = "WSS 失敗，切換 API";
+                fallbackAPI();
+            };
         }
 
-        // 2. 修復後的數據補充 (OI 與資費)
-        let timer = 1;
-        async function fetchMetrics() {
+        // 2. 暴力 API 保底機制 (如果 WSS 斷了就靠這個)
+        async function fallbackAPI() {
+            document.getElementById('stat-mode').innerText = "API 強制抓取";
             try {
-                // 這裡我們只抓一組大的 Premium Index，減少 API 壓力
-                const pIndex = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex").then(r => r.json());
-                pIndex.forEach(i => {
-                    if(market[i.symbol]) {
-                        market[i.symbol].funding = parseFloat(i.lastFundingRate) * 100;
-                    }
+                const res = await fetch("https://fapi.binance.com/fapi/v1/ticker/24hr").then(r => r.json());
+                res.forEach(t => {
+                    if (!t.symbol.endsWith("USDT") || BLACKLIST.includes(t.symbol)) return;
+                    if (!market[t.symbol]) market[t.symbol] = { symbol: t.symbol, history: [] };
+                    market[t.symbol].price = t.lastPrice;
+                    market[t.symbol].change = t.priceChangePercent;
+                    market[t.symbol].v = t.quoteVolume;
                 });
-                // 分批異步抓取熱門幣的 OI
-                const topSymbols = Object.values(market).sort((a,b) => b.v - a.v).slice(0, 15);
-                for(let s of topSymbols) {
+                renderUI();
+            } catch(e) {}
+        }
+
+        // 3. 核心數據補充 (OI, Funding)
+        let timer = 5;
+        async function fetchDeepData() {
+            try {
+                const pIndex = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex").then(r => r.json());
+                pIndex.forEach(i => { if(market[i.symbol]) market[i.symbol].funding = parseFloat(i.lastFundingRate)*100; });
+                
+                const top3 = Object.values(market).sort((a,b) => b.v - a.v).slice(0, 3);
+                for(let s of top3) {
                     const oi = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${s.symbol}`).then(r => r.json());
                     market[s.symbol].oi = parseFloat(oi.openInterest);
                 }
-            } catch (e) { document.getElementById('stat-api').innerText = "API 頻率限制中"; }
-            timer = 20;
+            } catch (e) {}
+            timer = 15;
         }
 
         setInterval(() => {
             timer--;
             document.getElementById('stat-timer').innerText = timer + "s";
-            if(timer <= 0) fetchMetrics();
+            if(timer <= 0) {
+                fetchDeepData();
+                if(document.getElementById('stat-conn').innerText !== "WSS 已連通") fallbackAPI();
+            }
         }, 1000);
 
-        // 3. UI 渲染與全要素餵食
         function renderUI() {
             const sorted = Object.values(market)
                 .filter(i => i.price && i.funding)
                 .sort((a, b) => (Math.abs(b.funding)*100 + Math.abs(b.change)) - (Math.abs(a.funding)*100 + Math.abs(a.change)))
                 .slice(0, 3);
-
             const deck = document.getElementById('sniper-deck');
             deck.innerHTML = "";
-
             sorted.forEach(item => {
-                const isAlert = Math.abs(item.funding) >= 0.05; // [cite: 2026-01-11]
+                const isAlert = Math.abs(item.funding) >= 0.05;
                 const slope = item.history.length > 5 ? ((item.history[item.history.length-1] - item.history[0]) / item.history[0] * 100) : 0;
-                
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.innerHTML = `
@@ -121,15 +123,14 @@
                         <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.funding.toFixed(4)}%</span>
                     </div>
                     <div class="data-grid">
-                        <div class="item"><div style="font-size:0.6rem;color:#666">OI (持倉)</div><div class="val">${item.oi ? (item.oi/1000000).toFixed(2) : '--'}M</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">成交額</div><div class="val">${(item.v/1000000).toFixed(1)}M</div></div>
-                        <div class="item"><div style="font-size:0.65rem;color:#888">變盤狀態</div><div class="val" style="color:${isAlert?'var(--purple)':'#555'}">${isAlert?'觸發診斷':'監控中'}</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">OI 持倉</div><div class="val">${item.oi?(item.oi/1000000).toFixed(2):'--'}M</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val">${slope.toFixed(3)}%</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">實時價</div><div class="val">$${parseFloat(item.price)}</div></div>
+                        <div class="item"><div style="font-size:0.65rem;color:#888">變盤狀態</div><div class="val">${isAlert?'觸發':'監控'}</div></div>
                     </div>
-                    <div class="ai-box" id="ai-${item.symbol}">>> L3 數據收集中... 符合斜率或資費門檻將自動診斷</div>
+                    <div class="ai-box" id="ai-${item.symbol}">>> 等待變盤特徵...</div>
                 `;
                 deck.appendChild(card);
-
                 if ((isAlert || Math.abs(slope) > 0.05) && !aiLock) askAI(item, slope);
             });
         }
@@ -137,7 +138,7 @@
         async function askAI(item, slope) {
             aiLock = true;
             try {
-                const prompt = `你是加密狙擊手。分析 ${item.symbol}：價格 ${item.price}, 1M斜率 ${slope.toFixed(4)}%, OI ${item.oi}M, 資費 ${item.funding}%。任務：1.識別型態 2.意圖 3.表態方向 4.噴發倒數 5.勝率。繁體中文。`;
+                const prompt = `你是冷酷狙擊手。分析 ${item.symbol}：價 ${item.price}, 斜率 ${slope.toFixed(4)}%, OI ${item.oi}M, 資費 ${item.funding}%。1.型態 2.意圖 3.方向 4.噴發 5.勝率。繁體中文。`;
                 const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
@@ -147,14 +148,14 @@
                 const res = d.choices[0].message.content;
                 document.getElementById(`ai-${item.symbol}`).innerText = ">> " + res;
                 if(res.includes("90%") || res.includes("95%")) {
-                    fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 變盤警告: ${item.symbol}\n${res}&title=🔱 TRIDENT ALERT` });
+                    fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 機會: ${item.symbol}\n${res}&title=🔱 ALERT` });
                 }
             } catch (e) {}
             setTimeout(() => { aiLock = false; }, 8000);
         }
 
         initWSS();
-        fetchMetrics();
+        fetchDeepData();
     </script>
 </body>
 </html>

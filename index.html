@@ -2,32 +2,21 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V8.0 FINAL</title>
+    <title>🔱 TRIDENT V8.8 - STRUCTURE FIXED</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
-        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; padding: 10px; margin: 0; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 10px; margin: 0; }
         .header { background: #111; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 10px; }
-        .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; font-size: 0.75rem; background: #0a0a0a; padding: 10px; border-radius: 8px; border: 1px solid #222; }
         #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 15px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 18px; border-top: 3px solid #333; position: relative; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 18px; border-top: 3px solid #333; transition: 0.3s; }
         .symbol { font-size: 1.8rem; font-weight: 900; color: var(--accent); }
         .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 8px; border-radius: 5px; border: 1px solid #333; }
         .alert-purple { background: var(--purple) !important; color: white !important; box-shadow: 0 0 15px var(--purple); border: none; }
-        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
-        .item { background: #111; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #222; }
-        .val { font-size: 1rem; font-weight: bold; font-family: monospace; color: #fff; }
-        .ai-box { background: #000; color: var(--accent); padding: 12px; border-radius: 10px; font-size: 0.85rem; border-left: 4px solid var(--accent); min-height: 100px; border: 1px solid #222; white-space: pre-wrap; line-height: 1.6; }
+        .ai-box { background: #000; color: var(--accent); padding: 12px; border-radius: 10px; font-size: 0.85rem; border-left: 4px solid var(--accent); min-height: 110px; border: 1px solid #222; white-space: pre-wrap; line-height: 1.6; }
     </style>
 </head>
 <body>
-
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V8.0 FINAL</span></h1></div>
-    <div class="dashboard">
-        <div>📡 數據流: L3 WSS 實時</div>
-        <div>🟣 資費警戒: ±0.05% [cite: 2026-01-11]</div>
-        <div>🚫 黑名單隔離中 [cite: 2026-01-12]</div>
-        <div>📲 推送密鑰已鎖定 [cite: 2026-01-21]</div>
-    </div>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V8.8 FIX</span></h1></div>
     <div id="sniper-deck"></div>
 
     <script>
@@ -41,23 +30,14 @@
         let lastAiTime = {};
 
         async function init() {
-            try {
-                const resp = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex");
-                const data = await resp.json();
-                data.forEach(i => {
-                    if (i.symbol.endsWith("USDT") && !BLACKLIST.includes(i.symbol)) {
-                        market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate) * 100, price: i.markPrice, hist: [], oi: "...", change: "0" };
-                    }
-                });
-                startWSS();
-            } catch (e) { console.error("初始化失敗"); }
-        }
-
-        async function getOI(s) {
-            try {
-                const res = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${s}`).then(r => r.json());
-                return (parseFloat(res.openInterest) / 1000000).toFixed(1) + "M";
-            } catch (e) { return "0.0M"; }
+            const resp = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex");
+            const data = await resp.json();
+            data.forEach(i => {
+                if (i.symbol.endsWith("USDT") && !BLACKLIST.includes(i.symbol)) {
+                    market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate) * 100, price: i.markPrice, hist: [], oi: "..." };
+                }
+            });
+            startWSS();
         }
 
         function startWSS() {
@@ -68,7 +48,7 @@
                         market[t.s].price = t.c;
                         market[t.s].change = t.P;
                         market[t.s].hist.push(parseFloat(t.c));
-                        if(market[t.s].hist.length > 20) market[t.s].hist.shift();
+                        if(market[t.s].hist.length > 30) market[t.s].hist.shift();
                     }
                 });
                 render();
@@ -76,18 +56,12 @@
         }
 
         function render() {
-            const top = Object.values(market)
-                .filter(i => i.price)
-                .sort((a, b) => Math.abs(b.fd) - Math.abs(a.fd))
-                .slice(0, 3);
-
+            const top = Object.values(market).filter(i => i.price).sort((a, b) => Math.abs(b.fd) - Math.abs(a.fd)).slice(0, 3);
             const deck = document.getElementById('sniper-deck');
             deck.innerHTML = "";
 
             top.forEach(async item => {
-                const slope = item.hist.length > 5 ? ((item.hist[item.hist.length-1] - item.hist[0]) / item.hist[0] * 100) : 0;
                 const isAlert = Math.abs(item.fd) >= 0.05;
-
                 const card = document.createElement('div');
                 card.className = 'card';
                 if(isAlert) card.style.borderColor = 'var(--purple)';
@@ -96,51 +70,45 @@
                         <span class="symbol">${item.s}</span>
                         <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.fd.toFixed(4)}%</span>
                     </div>
-                    <div class="data-grid">
-                        <div class="item"><div style="font-size:0.6rem;color:#666">OI 持倉</div><div class="val" id="oi-${item.s}">${item.oi}</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">24H 漲跌</div><div class="val">${item.change}%</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">AI 狀態</div><div class="val">${isAiBusy?'BLOCK':'READY'}</div></div>
-                    </div>
-                    <div class="ai-box" id="ai-${item.s}">>> 系統監控中...</div>
+                    <div style="margin:10px 0; font-size:0.9rem;">現價: ${item.price} | 24H: ${item.change}%</div>
+                    <div class="ai-box" id="ai-${item.s}">>> 數據收集中...</div>
                 `;
                 deck.appendChild(card);
 
-                if (item.oi === "...") {
-                    item.oi = await getOI(item.s);
-                    const oiDiv = document.getElementById(`oi-${item.s}`);
-                    if(oiDiv) oiDiv.innerText = item.oi;
-                }
-
-                // 符合條件且 AI 有空則執行
-                if ((isAlert || Math.abs(slope) > 0.08) && !isAiBusy && (!lastAiTime[item.s] || Date.now() - lastAiTime[item.s] > 60000)) {
-                    runFinalAI(item, slope);
+                const slope = item.hist.length > 10 ? ((item.hist[item.hist.length-1] - item.hist[0]) / item.hist[0] * 100) : 0;
+                if ((isAlert || Math.abs(slope) > 0.1) && !isAiBusy && (!lastAiTime[item.s] || Date.now() - lastAiTime[item.s] > 60000)) {
+                    runFixAI(item, slope);
                 }
             });
         }
 
-        async function runFinalAI(item, slope) {
+        async function runFixAI(item, slope) {
             isAiBusy = true;
             lastAiTime[item.s] = Date.now();
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [連線成功] 正在獲取 AI 深度分析...";
+            box.innerText = ">> [連線成功] 正在進行 K 線意圖診斷...";
 
             try {
-                // 修復關鍵：嚴格遵守 Groq 的官方 JSON 結構
+                const oiRes = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${item.s}`).then(r => r.json());
+                const oiVal = (parseFloat(oiRes.openInterest) / 1000000).toFixed(1) + "M";
+                const priceSeries = item.hist.join(",");
+
+                // 修正後的 Groq 請求結構 (解決 400 錯誤)
                 const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${GROQ_KEY}`,
-                        "Content-Type": "application/json"
+                    headers: { 
+                        "Authorization": "Bearer " + GROQ_KEY, 
+                        "Content-Type": "application/json" 
                     },
                     body: JSON.stringify({
                         model: "llama3-70b-8192",
                         messages: [
-                            { role: "system", content: "你是一個專業的加密貨幣操盤手，請根據數據給出簡短精確的意圖分析與預期勝率。" },
-                            { role: "user", content: `幣種:${item.s}, 價格:${item.price}, 1M斜率:${slope.toFixed(2)}%, OI:${item.oi}, 資費:${item.fd.toFixed(4)}%. 用繁體中文簡述.` }
+                            { 
+                                role: "user", 
+                                content: `你是K線大師。標的:${item.s}, 價格點:[${priceSeries}], OI:${oiVal}, 資費:${item.fd.toFixed(4)}%. 簡述意圖與勝率。繁中。` 
+                            }
                         ],
-                        temperature: 0.1,
-                        max_tokens: 300
+                        temperature: 0.2
                     })
                 });
 
@@ -149,25 +117,24 @@
                     const result = data.choices[0].message.content;
                     box.innerText = ">> " + result;
 
-                    // 推送邏輯 [cite: 2026-01-21]
                     if (result.includes("90") || result.includes("勝率高")) {
-                        sendPushover(`🎯 訊號: ${item.s}\n${result}`);
+                        sendPushover(result, item.s);
                     }
                 } else {
-                    box.innerText = ">> API 回應異常，請確認 API Key 是否有效。";
+                    box.innerText = ">> 回應結構異常";
                 }
             } catch (err) {
-                box.innerText = "❌ 分析中斷。請確認橘色 C 外掛已開啟並重新整理。";
+                box.innerText = "❌ 請求失敗，請確認外掛已點亮。";
             } finally {
-                setTimeout(() => { isAiBusy = false; }, 8000); // 鎖定 8 秒防止洗版
+                setTimeout(() => { isAiBusy = false; }, 8000);
             }
         }
 
-        function sendPushover(msg) {
+        function sendPushover(msg, symbol) {
             fetch("https://api.pushover.net/1/messages.json", {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=🔱 TRIDENT SIGNAL`
+                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=🔱 TRIDENT:${symbol}`
             });
         }
 

@@ -2,135 +2,93 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V13.0 - CONNECTION FIXED</title>
+    <title>🔱 TRIDENT V15.0 FINAL</title>
     <style>
-        :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 10px; margin: 0; }
-        .header { background: #111; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 10px; }
-        #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 15px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 18px; border-top: 3px solid #333; }
-        .symbol { font-size: 1.8rem; font-weight: 900; color: var(--accent); }
-        .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 8px; border-radius: 5px; border: 1px solid #333; }
-        .alert-purple { background: var(--purple) !important; color: white !important; }
-        .ai-box { background: #000; color: var(--accent); padding: 12px; border-radius: 10px; font-size: 0.85rem; border-left: 4px solid var(--accent); min-height: 120px; white-space: pre-wrap; border: 1px solid #222; }
+        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+        .card { border: 1px dotted #333; padding: 15px; margin-bottom: 10px; }
+        .symbol { font-size: 1.5rem; color: #00ffcc; }
+        .ai-box { background: #111; padding: 10px; color: #fff; border-left: 3px solid #0f0; margin-top: 5px; }
     </style>
 </head>
 <body>
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V13.0 FIXED</span></h1></div>
-    <div id="sniper-deck"></div>
+    <h2>🔱 TRIDENT V15.0 - 強制對接模式</h2>
+    <div id="deck"></div>
 
     <script>
-        const PUSHOVER_USER = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
-        const PUSHOVER_TOKEN = "acyoe3sz15x4n91r1349fdcau7x6pw";
-        const GROQ_KEY = "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";
+        const GK = "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";
+        const PT = "acyoe3sz15x4n91r1349fdcau7x6pw";
+        const PU = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
-        
-        let market = {};
-        let isAiBusy = false;
-        let lastAiTime = {};
 
-        async function init() {
-            const resp = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex");
-            const data = await resp.json();
-            data.forEach(i => {
+        let market = {};
+        let busy = false;
+
+        async function start() {
+            const r = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex");
+            const d = await r.json();
+            d.forEach(i => {
                 if (i.symbol.endsWith("USDT") && !BLACKLIST.includes(i.symbol)) {
-                    market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate) * 100, price: i.markPrice, hist: [] };
+                    market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate)*100, p: i.markPrice, startP: i.markPrice };
                 }
             });
-            startWSS();
-        }
-
-        function startWSS() {
             const ws = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
             ws.onmessage = (e) => {
-                JSON.parse(e.data).forEach(t => {
-                    if (market[t.s]) {
-                        market[t.s].price = t.c;
-                        market[t.s].change = t.P;
-                        market[t.s].hist.push(parseFloat(t.c).toFixed(4));
-                        if(market[t.s].hist.length > 15) market[t.s].hist.shift();
-                    }
-                });
-                render();
+                JSON.parse(e.data).forEach(t => { if(market[t.s]) market[t.s].p = t.c; });
+                draw();
             };
         }
 
-        function render() {
-            const top = Object.values(market).filter(i => i.price).sort((a, b) => Math.abs(b.fd) - Math.abs(a.fd)).slice(0, 3);
-            const deck = document.getElementById('sniper-deck');
+        function draw() {
+            const list = Object.values(market).filter(x => x.p).sort((a,b) => Math.abs(b.fd) - Math.abs(a.fd)).slice(0,3);
+            const deck = document.getElementById("deck");
             deck.innerHTML = "";
-
-            top.forEach(item => {
+            list.forEach(item => {
                 const isAlert = Math.abs(item.fd) >= 0.05;
-                const card = document.createElement('div');
-                card.className = 'card';
-                if(isAlert) card.style.borderColor = 'var(--purple)';
-                card.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span class="symbol">${item.s}</span>
-                        <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.fd.toFixed(4)}%</span>
-                    </div>
-                    <div style="margin:10px 0; font-size:0.9rem;">現價: ${item.price} | 24H: ${item.change}%</div>
-                    <div class="ai-box" id="ai-${item.s}">>> 系統監控中...</div>
-                `;
-                deck.appendChild(card);
+                const div = document.createElement("div");
+                div.className = "card";
+                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">系統待命中...</div>`;
+                deck.appendChild(div);
 
-                const slope = item.hist.length > 5 ? ((item.hist[item.hist.length-1] - item.hist[0]) / item.hist[0] * 100) : 0;
-                if ((isAlert || Math.abs(slope) > 0.1) && !isAiBusy && (!lastAiTime[item.s] || Date.now() - lastAiTime[item.s] > 60000)) {
-                    runFinalFixedAI(item);
-                }
+                if (isAlert && !busy) callAI(item);
             });
         }
 
-        async function runFinalFixedAI(item) {
-            isAiBusy = true;
-            lastAiTime[item.s] = Date.now();
-            const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [連線測試] 正在強行接入 AI...";
-
+        async function callAI(item) {
+            busy = true;
+            document.getElementById(`ai-${item.s}`).innerText = ">> 正在進行破壁連線...";
+            
             try {
-                // 簡化數據，確保不觸發 Groq 的格式錯誤
-                const pFlow = item.hist.slice(-10).join("->");
-                const prompt = `狙擊手指令:標的${item.s},走勢${pFlow},資費${item.fd.toFixed(3)}%。給出方向(多/空)、表態時間(min)、勝率。繁中結論。`;
-
+                // 採用最原始的 fetch 配置，防止外掛干擾
                 const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
-                    headers: { 
-                        "Authorization": "Bearer " + GROQ_KEY,
-                        "Content-Type": "application/json"
-                    },
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GK}` },
                     body: JSON.stringify({
                         model: "llama3-70b-8192",
-                        messages: [{ role: "user", content: prompt }],
+                        messages: [{role: "user", content: `標的:${item.s},始價:${item.startP},現價:${item.p},資費:${item.fd}%。給出:方向(多/空)、表態時間(min)、勝率。結論第一行。`}],
                         temperature: 0.1
                     })
                 });
 
                 const data = await response.json();
-                if (data.error) throw new Error(data.error.message);
+                if(data.error) throw new Error(data.error.message);
                 
-                const result = data.choices[0].message.content;
-                box.innerText = ">> " + result;
+                const res = data.choices[0].message.content;
+                document.getElementById(`ai-${item.s}`).innerText = ">> " + res;
 
-                if (result.includes("9") || result.includes("高勝率")) {
-                    const dir = result.includes("多") ? "多" : (result.includes("空") ? "空" : "？");
-                    sendPushover(result, `【${dir}】${item.s}`);
+                if (res.includes("9") || res.includes("高")) {
+                    fetch("https://api.pushover.net/1/messages.json", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: `token=${PT}&user=${PU}&message=${encodeURIComponent(res)}&title=🔱TRIDENT:${item.s}`
+                    });
                 }
             } catch (err) {
-                box.innerText = "❌ 接通失敗: " + err.message + "\n請確認橘色外掛為 ON 並嘗試重新整理。";
+                document.getElementById(`ai-${item.s}`).innerText = "❌ 接通失敗：" + err.message;
             } finally {
-                setTimeout(() => { isAiBusy = false; }, 5000);
+                setTimeout(() => { busy = false; }, 10000);
             }
         }
-
-        function sendPushover(msg, title) {
-            fetch("https://api.pushover.net/1/messages.json", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=${encodeURIComponent(title)}`
-            });
-        }
-        init();
+        start();
     </script>
 </body>
 </html>

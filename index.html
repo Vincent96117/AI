@@ -679,29 +679,92 @@ function updateRanking(){
    Gemini Call (robust JSON extraction)
 ========================= */
 function extractJsonLoose(text){
-  const s = String(text||'').trim();
-  if(!s) return null;
+  const s0 = String(text || '').trim();
+  if(!s0) return null;
 
-  // remove common code fences
-  let t = s.replace(/^```(?:json)?/i, '').replace(/```$/,'').trim();
+  // 1) remove code fences (common)
+  let s = s0.replace(/^```(?:json)?/i, '').replace(/```$/,'').trim();
 
-  // Try direct parse
-  try { return JSON.parse(t); } catch(e){}
+  // 2) try direct parse
+  try { return JSON.parse(s); } catch(e){}
 
-  // Try substring {...} or [...]
-  const firstObj = t.indexOf('{');
-  const lastObj = t.lastIndexOf('}');
-  if(firstObj !== -1 && lastObj !== -1 && lastObj > firstObj){
-    const sub = t.slice(firstObj, lastObj+1);
+  // 3) best-effort: find first { or [ and take tail
+  const iObj = s.indexOf('{');
+  const iArr = s.indexOf('[');
+  let start = -1;
+  if(iObj === -1) start = iArr;
+  else if(iArr === -1) start = iObj;
+  else start = Math.min(iObj, iArr);
+  if(start === -1) return null;
+
+  let candidate = s.slice(start).trim();
+
+  // 4) try "balanced close" repair (handles truncated JSON)
+  const repaired = balanceJson(candidate);
+  if(repaired){
+    try { return JSON.parse(repaired); } catch(e){}
+  }
+
+  // 5) try extract from first { to last } / first [ to last ]
+  const lastObj = s.lastIndexOf('}');
+  if(iObj !== -1 && lastObj > iObj){
+    const sub = s.slice(iObj, lastObj+1);
     try { return JSON.parse(sub); } catch(e){}
   }
-  const firstArr = t.indexOf('[');
-  const lastArr = t.lastIndexOf(']');
-  if(firstArr !== -1 && lastArr !== -1 && lastArr > firstArr){
-    const sub = t.slice(firstArr, lastArr+1);
+  const lastArr = s.lastIndexOf(']');
+  if(iArr !== -1 && lastArr > iArr){
+    const sub = s.slice(iArr, lastArr+1);
     try { return JSON.parse(sub); } catch(e){}
   }
+
   return null;
+}
+
+// --- helper: close missing } or ] safely (ignores braces inside strings)
+function balanceJson(input){
+  if(!input) return null;
+  let s = String(input).trim();
+
+  // If it doesn't even start as JSON, bail
+  if(!(s.startsWith('{') || s.startsWith('['))) return null;
+
+  let out = '';
+  const stack = [];
+  let inStr = false;
+  let esc = false;
+
+  for(let i=0;i<s.length;i++){
+    const ch = s[i];
+    out += ch;
+
+    if(inStr){
+      if(esc){ esc = false; continue; }
+      if(ch === '\\'){ esc = true; continue; }
+      if(ch === '"'){ inStr = false; continue; }
+      continue;
+    }else{
+      if(ch === '"'){ inStr = true; continue; }
+      if(ch === '{') stack.push('}');
+      else if(ch === '[') stack.push(']');
+      else if(ch === '}' || ch === ']'){
+        // pop if matches
+        if(stack.length && stack[stack.length-1] === ch) stack.pop();
+        else {
+          // mismatched close => keep going (don't attempt to fix aggressively)
+        }
+      }
+    }
+  }
+
+  // If ended inside a string, we cannot reliably repair (likely truncated mid-string)
+  if(inStr) return null;
+
+  // append missing closes
+  while(stack.length) out += stack.pop();
+
+  // basic sanity: must end with } or ]
+  if(!(out.trim().endsWith('}') || out.trim().endsWith(']'))) return null;
+  return out.trim();
 }
 
 function aiToPrettyZh(obj){
@@ -739,30 +802,44 @@ function aiToPrettyZh(obj){
 }
 
 function buildGeminiPrompt(summary){
-  // 只做多 + 必須輸出 JSON（但仍做防呆抽取）
+  // 只做多 + 輸出要短，降低被截斷機率
   return `
 你是合約交易助理，策略只做「多單」。
 你會拿到一個幣種的精簡摘要（非整包K線）。
-請你輸出「單一 JSON 物件」，不要加任何多餘文字、不要 code fence、不要 markdown。
+請只輸出「單一 JSON 物件」本體，不要任何多餘文字、不要 markdown、不要 code fence。
 
-需求：
-- direction: 只能是 "做多" 或 "觀望"
-- confidence: 0~100（整數）
-- eta_minutes: 用字串區間，例如 "5-10"、"10-20"
-- stage: "蓄勢" / "點火" / "觸發"（依摘要判斷）
-- entry: { type: "市價"|"限價", zone: "價格區間或單價", logic: "一句話原因" }
-- stop: { zone: "價格或區間", logic: "一句話原因" }
-- takeProfit: 陣列，最多3個 { price: "價位", logic:"一句話原因" }
-- invalidation: "哪些條件成立就不做多/撤退"
-- notes: 陣列（3~6點），用繁體中文，講你為什麼這樣判斷（要對應摘要數據）
+嚴格規格（務必遵守）：
+- 最外層必須是 { ... }，最後一個字元必須是 }
+- 所有字串都用雙引號 "
+- 不要換行太多；總輸出請保持精簡
+- notes 最多 3 點；每點不超過 20 個中文字
+- takeProfit 最多 2 段
 
-若摘要顯示「已大幅噴出」或「結構不利多」，請 direction="觀望"，仍然要填滿其餘欄位（填 "-" 或合理保守值）。
+欄位（全部都要有，沒有就填 "-"）：
+{
+  "direction": "做多"|"觀望",
+  "confidence": 0-100,
+  "eta_minutes": "5-10" 這種區間字串,
+  "stage": "蓄勢"|"點火"|"觸發",
+  "score": 0-100,
+  "entry": { "type":"市價"|"限價", "zone":"價位或區間", "logic":"<=20字" },
+  "stop":  { "zone":"價位或區間", "logic":"<=20字" },
+  "takeProfit": [
+    { "price":"價位", "logic":"<=20字" },
+    { "price":"價位", "logic":"<=20字" }
+  ],
+  "invalidation": "一句話",
+  "notes": ["...","...","..."]
+}
+
+判斷規則：
+- 如果摘要顯示「已大幅噴出/不適合追」或「結構不利多」=> direction="觀望"，其他欄位仍要填滿（用保守值或 "-"）。
+- 只做多，不要輸出空單建議。
 
 摘要如下（JSON）：
 ${JSON.stringify(summary)}
 `.trim();
 }
-
 async function callGemini(symbol){
   const st = states[symbol];
   if(!st) return;
@@ -875,14 +952,86 @@ async function callGemini(symbol){
     const parts = envelope?.candidates?.[0]?.content?.parts || [];
     const joined = parts.map(p => p.text || '').join('\n').trim();
 
-    const obj = extractJsonLoose(joined);
-    if(!obj){
-      st.ai = { status:'NO_VALID_JSON', json:null, text:`AI(錯誤)：HTTP 200，但 Gemini 回的不是有效 JSON（已要求 JSON mode）`, t:nowTs(), err: joined.slice(0,300) };
-      setGeminiStatus('HTTP200 但非 JSON（已做抽取）');
-      console.warn('Gemini raw joined:', joined);
-      renderTop5();
-      return;
+    let obj = extractJsonLoose(joined);
+
+if(!obj){
+  // ---- Auto retry once (most cases are truncation) ----
+  const looksTruncated =
+    joined.includes('{') &&
+    !joined.trim().endsWith('}') &&
+    joined.trim().length > 0;
+
+  // 只重試一次：提高 maxOut + 再次強化「最後必須是 }」
+  if(looksTruncated){
+    try{
+      const maxOut2 = Math.max(maxOut, 900);
+      const prompt2 = prompt + `
+
+再次提醒：你只能輸出單一 JSON 物件本體；最後一個字元必須是 }；不要任何多餘文字。`;
+
+      const body2 = {
+        contents: [{ role:'user', parts:[{ text: prompt2 }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: maxOut2,
+          responseMimeType: "application/json"
+        }
+      };
+
+      const res2 = await fetch(url, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify(body2)
+      });
+
+      const rawText2 = await res2.text();
+      if(res2.ok){
+        let env2 = null;
+        try{ env2 = JSON.parse(rawText2); }catch(e){ env2 = null; }
+        const parts2 = env2?.candidates?.[0]?.content?.parts || [];
+        const joined2 = parts2.map(p => p.text || '').join('\n').trim();
+
+        obj = extractJsonLoose(joined2);
+        if(obj){
+          st.ai = { status:'OK', json: obj, text: aiToPrettyZh(obj), t: nowTs(), err:'' };
+          setGeminiStatus('OK');
+          renderTop5();
+          return;
+        }else{
+          // still invalid after retry: show partial to user instead of "空白"
+          st.ai = {
+            status:'NO_VALID_JSON',
+            json:null,
+            text:`AI(錯誤)：HTTP 200，但回覆仍非有效 JSON（已重試一次）\n\n原始回覆片段：\n${joined2.slice(0,300)}`,
+            t:nowTs(),
+            err: joined2.slice(0,300)
+          };
+          setGeminiStatus('HTTP200 但非 JSON（已重試）');
+          console.warn('Gemini retry raw joined:', joined2);
+          renderTop5();
+          return;
+        }
+      }
+      // if retry non-200, fall through to original error below
+      console.warn('Gemini retry failed HTTP', res2.status, rawText2);
+    }catch(e){
+      console.warn('Gemini retry exception:', e);
     }
+  }
+
+  // no retry or retry failed
+  st.ai = {
+    status:'NO_VALID_JSON',
+    json:null,
+    text:`AI(錯誤)：HTTP 200，但 Gemini 回的不是有效 JSON（已要求 JSON mode）\n\n原始回覆片段：\n${joined.slice(0,300)}`,
+    t:nowTs(),
+    err: joined.slice(0,300)
+  };
+  setGeminiStatus('HTTP200 但非 JSON（看 Console）');
+  console.warn('Gemini raw joined:', joined);
+  renderTop5();
+  return;
+}
 
     st.ai = { status:'OK', json: obj, text: aiToPrettyZh(obj), t: nowTs(), err:'' };
     setGeminiStatus('OK');

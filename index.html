@@ -2,33 +2,30 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.5 - ALL IN ONE</title>
+    <title>TRIDENT V6.5 - THE FINAL SOUL</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; --warn: #ff3e3e; }
         body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 15px; }
-        .header { background: linear-gradient(180deg, #1a1a1a, #050505); padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 20px; }
+        .header { background: #1a1a1a; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 20px; }
         #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
         .card { background: var(--card); border: 2px solid #222; border-radius: 18px; padding: 20px; position: relative; transition: 0.3s; }
-        .symbol-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .symbol { font-size: 2.1rem; font-weight: 900; color: var(--accent); }
-        .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 8px; border-radius: 5px; border: 1px solid #444; }
-        .alert-purple { background: var(--purple) !important; color: white !important; border-color: var(--purple) !important; font-weight: bold; box-shadow: 0 0 15px var(--purple); }
+        .symbol { font-size: 2.2rem; font-weight: 900; color: var(--accent); }
+        .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; border: 1px solid #444; }
+        .alert-purple { background: var(--purple) !important; color: white !important; border-color: var(--purple) !important; box-shadow: 0 0 15px var(--purple); }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
         .item { background: #151515; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #222; }
         .val { font-size: 1.1rem; font-weight: bold; font-family: monospace; }
         .ai-box { background: #000; color: var(--accent); padding: 15px; border-radius: 10px; font-size: 0.85rem; line-height: 1.6; border-left: 4px solid var(--accent); min-height: 100px; white-space: pre-wrap; }
-        .status-tag { font-size: 0.7rem; color: #555; margin-top: 10px; text-align: center; letter-spacing: 1px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1 style="margin:0; letter-spacing:4px;">🔱 TRIDENT <span style="color:var(--accent)">ALL-IN</span></h1>
-        <div id="engine-status" style="color:#00ffcc; font-size:0.8rem; margin-top:5px;">LEVEL 3 STREAMING ACTIVE</div>
+        <h1 style="margin:0; letter-spacing:4px;">🔱 TRIDENT <span style="color:var(--accent)">V6.5 SOUL</span></h1>
+        <div id="engine-status" style="color:#888; font-size:0.8rem; margin-top:5px;">L3 WSS 已就緒 | 排除 BTC, ETH 等主流幣 | 資費 0.05% 警戒啟動</div>
     </div>
 
     <div id="sniper-deck"></div>
-    <div class="status-tag">已排除 BTC, ETH, SOL, XRP, BNB, BNX | 資費 0.05% 紫色警戒 | 勝率 90%+ 推送手機</div>
 
     <script>
         // [cite: 2026-01-21] 用戶密鑰注入
@@ -36,97 +33,82 @@
         const PUSHOVER_TOKEN = "acyoe3sz15x4n91r1349fdcau7x6pw";
         const GROQ_KEY = "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";
         
-        // [cite: 2026-01-12] 硬核黑名單
+        // [cite: 2026-01-12] 嚴格黑名單
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
         
-        let marketData = {};
+        let market = {};
         let aiLock = false;
 
-        // 1. 初始化 WebSocket (Level 3 數據流)
+        // 1. Level 3 WebSocket (解決價格跳動報錯)
         function initWSS() {
             const ws = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
             ws.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 data.forEach(t => {
                     if (!t.s.endsWith("USDT") || BLACKLIST.includes(t.s)) return;
-                    if (!marketData[t.s]) marketData[t.s] = {};
-                    marketData[t.s].price = t.c;
-                    marketData[t.s].priceChange = t.P;
-                    marketData[t.s].lastVol = t.v;
+                    if (!market[t.s]) market[t.s] = { symbol: t.s };
+                    market[t.s].price = t.c;
+                    market[t.s].change = t.P;
                 });
                 renderUI();
             };
             ws.onclose = () => setTimeout(initWSS, 5000);
         }
 
-        // 2. 定期補充 API 數據 (OI, Funding, 量縮斜率核心)
-        async function fetchDeepMetrics() {
+        // 2. 獲取核心籌碼數據 (OI, Funding)
+        async function fetchMetrics() {
             try {
                 const [pIndex, oiData] = await Promise.all([
                     fetch("https://fapi.binance.com/fapi/v1/premiumIndex").then(r => r.json()),
-                    fetch("https://fapi.binance.com/fapi/v1/openInterest/list").then(r => r.json()) // 使用 list 接口減少請求數
+                    fetch("https://fapi.binance.com/fapi/v1/openInterest/list").then(r => r.json())
                 ]);
-
-                pIndex.forEach(item => {
-                    if (marketData[item.symbol]) {
-                        marketData[item.symbol].funding = parseFloat(item.lastFundingRate) * 100;
-                    }
-                });
-
-                // 每 15 秒更新一次重度指標
-                setTimeout(fetchDeepMetrics, 15000);
+                pIndex.forEach(i => { if(market[i.symbol]) market[i.symbol].funding = parseFloat(i.lastFundingRate)*100; });
+                oiData.forEach(i => { if(market[i.symbol]) market[i.symbol].oi = parseFloat(i.openInterest); });
+                setTimeout(fetchMetrics, 20000); // 20秒更新一次重度數據
             } catch (e) {}
         }
 
-        // 3. UI 渲染與過濾邏輯
+        // 3. UI 渲染與「地獄級」過濾
         function renderUI() {
-            const deck = document.getElementById('sniper-deck');
-            // 計算評分排序：資費權重 + 波動
-            const sorted = Object.values(marketData)
-                .filter(i => i.price)
-                .sort((a, b) => {
-                    const scoreA = Math.abs(a.funding || 0) * 100 + Math.abs(a.priceChange || 0);
-                    const scoreB = Math.abs(b.funding || 0) * 100 + Math.abs(b.priceChange || 0);
-                    return scoreB - scoreA;
-                }).slice(0, 3);
+            const sorted = Object.values(market)
+                .filter(i => i.price && i.funding)
+                .sort((a, b) => (Math.abs(b.funding)*100 + Math.abs(b.change)) - (Math.abs(a.funding)*100 + Math.abs(a.change)))
+                .slice(0, 3);
 
-            if (sorted.length === 0) return;
+            const deck = document.getElementById('sniper-deck');
             deck.innerHTML = "";
 
             sorted.forEach(item => {
-                const fd = item.funding || 0;
-                const isAlert = Math.abs(fd) >= 0.05; // [cite: 2026-01-11]
+                const isAlert = Math.abs(item.funding) >= 0.05; // [cite: 2026-01-11]
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.innerHTML = `
-                    <div class="symbol-row">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span class="symbol">${item.symbol}</span>
-                        <span class="funding ${isAlert ? 'alert-purple' : ''}">FUNDING: ${fd.toFixed(4)}%</span>
+                        <span class="funding ${isAlert ? 'alert-purple' : ''}">FUNDING: ${item.funding.toFixed(4)}%</span>
                     </div>
                     <div class="grid">
-                        <div class="item"><div style="font-size:0.7rem;color:#666">24H 漲跌</div><div class="val" style="color:${item.priceChange > 0 ? 'var(--accent)' : 'var(--warn)'}">${item.priceChange}%</div></div>
+                        <div class="item"><div style="font-size:0.7rem;color:#666">24H 漲跌</div><div class="val" style="color:${item.change > 0 ? 'var(--accent)' : 'var(--warn)'}">${item.change}%</div></div>
                         <div class="item"><div style="font-size:0.7rem;color:#666">實時價</div><div class="val">$${parseFloat(item.price)}</div></div>
+                        <div class="item"><div style="font-size:0.7rem;color:#666">實時 OI (持倉)</div><div class="val">${(item.oi / 1000000).toFixed(2)}M</div></div>
+                        <div class="item"><div style="font-size:0.7rem;color:#666">系統過濾</div><div class="val">${isAlert ? '🔥 警戒觸發' : '穩定監控'}</div></div>
                     </div>
-                    <div class="ai-box" id="ai-${item.symbol}">> Level 3 監控中... 符合變盤門檻時自動激活 AI</div>
+                    <div class="ai-box" id="ai-${item.symbol}">>> 等待變盤特徵觸發...</div>
                 `;
                 deck.appendChild(card);
 
-                // --- 前端餵食過濾：資費爆表 或 24H 波動劇烈 ---
-                if ((isAlert || Math.abs(item.priceChange) > 7) && !aiLock) {
+                // --- 靈魂門檻：只有變盤才餵 AI ---
+                if (isAlert || Math.abs(item.change) > 8) {
                     askAI(item);
                 }
             });
         }
 
         async function askAI(item) {
+            if (aiLock) return;
             aiLock = true;
-            const box = document.getElementById(`ai-${item.symbol}`);
-            box.innerText = ">> [觸發診斷] 正在連線 Llama-3-70B 分析變盤指紋...";
-
             try {
-                const prompt = `你是加密狙擊手。分析 ${item.symbol}：價格 ${item.price}, 漲跌 ${item.priceChange}%, 資費 ${item.funding.toFixed(4)}% (0.05%警戒)。
-                任務：1.識別型態 2.主力意圖 3.表態方向 4.幾分鐘內噴發 5.勝率。繁體中文。`;
-
+                const prompt = `分析 ${item.symbol}：價格 ${item.price}, 漲跌 ${item.change}%, 資費 ${item.funding.toFixed(4)}% (0.05%警戒)。任務：1.型態 2.意圖 3.方向 4.噴發倒數 5.勝率。繁體中文。`;
                 const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
@@ -134,22 +116,16 @@
                 });
                 const d = await resp.json();
                 const res = d.choices[0].message.content;
-                box.innerText = ">> " + res;
-
-                // [cite: 2026-01-21]
-                if (res.includes("90%") || res.includes("95%")) {
-                    fetch("https://api.pushover.net/1/messages.json", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 TRIDENT 發現噴發機會: ${item.symbol}\n${res}&title=🔱 TRIDENT ALERT`
-                    });
+                document.getElementById(`ai-${item.symbol}`).innerText = ">> " + res;
+                if(res.includes("90%") || res.includes("95%")) {
+                    fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 變盤警告: ${item.symbol}\n${res}&title=🔱 TRIDENT ALERT` });
                 }
             } catch (e) {}
-            setTimeout(() => { aiLock = false; }, 8000); // 8秒冷卻，確保 AI 不報錯
+            setTimeout(() => { aiLock = false; }, 5000); // 5秒冷卻防止報錯
         }
 
         initWSS();
-        fetchDeepMetrics();
+        fetchMetrics();
     </script>
 </body>
 </html>

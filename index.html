@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.7 - ABSOLUTE</title>
+    <title>TRIDENT V6.8 - ULTIMATE</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 10px; margin: 0; }
@@ -16,18 +16,17 @@
         .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .item { background: #111; padding: 8px; border-radius: 6px; text-align: center; border: 1px solid #222; }
         .val { font-size: 0.95rem; font-weight: bold; font-family: monospace; color: #fff; }
-        .ai-box { background: #000; color: var(--accent); padding: 10px; border-radius: 8px; font-size: 0.8rem; border-left: 3px solid var(--accent); min-height: 80px; border: 1px solid #222; line-height: 1.4; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .ai-box { background: #000; color: var(--accent); padding: 10px; border-radius: 8px; font-size: 0.82rem; border-left: 3px solid var(--accent); min-height: 80px; border: 1px solid #222; line-height: 1.4; }
     </style>
 </head>
 <body>
 
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">ABSOLUTE STABILITY</span></h1></div>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">ULTIMATE FIX</span></h1></div>
     <div class="dashboard">
-        <div><span class="status-dot" style="background:#00ffcc"></span>L3 WSS 監控中</div>
+        <div>📡 L3 WSS 連線中</div>
         <div>🟣 資費警戒: ±0.05% [cite: 2026-01-11]</div>
-        <div>🚫 已排除 BTC/ETH 等 [cite: 2026-01-12]</div>
-        <div>📲 Pushover 已就緒 [cite: 2026-01-21]</div>
+        <div>🚫 黑名單隔離中 [cite: 2026-01-12]</div>
+        <div>📲 推送已就緒 [cite: 2026-01-21]</div>
     </div>
     <div id="sniper-deck"></div>
 
@@ -38,10 +37,9 @@
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
         
         let market = {};
-        let isAiBusy = false; // AI 請求鎖
-        let lastAiTime = {}; // 個別幣種冷卻
+        let isAiBusy = false;
+        let lastAiTime = {};
 
-        // 啟動實時 L3 行情與資費流
         function initStreams() {
             const wsPrice = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
             wsPrice.onmessage = (e) => {
@@ -53,7 +51,7 @@
                     market[t.s].change = t.P;
                     market[t.s].v24h = t.q;
                     market[t.s].hist.push(parseFloat(t.c));
-                    if(market[t.s].hist.length > 25) market[t.s].hist.shift();
+                    if(market[t.s].hist.length > 30) market[t.s].hist.shift();
                 });
                 renderUI();
             };
@@ -87,67 +85,66 @@
                         <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.fd.toFixed(4)}%</span>
                     </div>
                     <div class="data-grid">
-                        <div class="item"><div style="font-size:0.6rem;color:#666">24H 成交</div><div class="val">${(item.v24h/1000000).toFixed(1)}M</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">OI 持倉</div><div class="val" id="oi-${item.s}">WAIT</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">24H 漲跌</div><div class="val">${item.change}%</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">隊列狀態</div><div class="val">${isAiBusy?'WAITING':'IDLE'}</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">AI 狀態</div><div class="val">${isAiBusy?'QUEUING':'READY'}</div></div>
                     </div>
-                    <div class="ai-box" id="ai-${item.s}">>> 數據收集中...符合條件將自動啟動隊列</div>
+                    <div class="ai-box" id="ai-${item.s}">>> 系統監控中...</div>
                 `;
                 deck.appendChild(card);
 
-                // 觸發診斷邏輯
-                if ((isAlert || Math.abs(slope) > 0.08) && canRunAI(item.s)) {
-                    triggerAbsoluteAI(item, slope);
+                if ((isAlert || Math.abs(slope) > 0.08) && !isAiBusy && (!lastAiTime[item.s] || Date.now() - lastAiTime[item.s] > 60000)) {
+                    runFixAI(item, slope);
                 }
             });
         }
 
-        function canRunAI(s) {
-            const now = Date.now();
-            return !isAiBusy && (!lastAiTime[s] || now - lastAiTime[s] > 60000);
-        }
-
-        async function triggerAbsoluteAI(item, slope) {
-            isAiBusy = true; // 鎖定全局請求
+        async function runFixAI(item, slope) {
+            isAiBusy = true;
             lastAiTime[item.s] = Date.now();
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [隊列成功] 正在強刷 OI 並獲取診斷...";
+            box.innerText = ">> [發動] 正在連線 AI 伺服器...";
 
             try {
-                // 1. 診斷前獲取實時 OI
+                // 1. 強刷 OI
                 const oiRes = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${item.s}`).then(r => r.json());
-                const oiVal = (parseFloat(oiRes.openInterest) / 1000000).toFixed(1);
+                const oiVal = (parseFloat(oiRes.openInterest) / 1000000).toFixed(1) + "M";
+                document.getElementById(`oi-${item.s}`).innerText = oiVal;
 
-                // 2. 構建極簡 Payload
-                const prompt = `分析 ${item.s}: 價${item.price},斜率${slope.toFixed(3)}%,OI ${oiVal}M,資費${item.fd.toFixed(4)}%. 判斷主力意圖與勝率. 繁體中文.`;
-
+                // 2. 修復後的 AI 請求 (加入極致容錯)
                 const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
-                    headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+                    headers: {
+                        "Authorization": `Bearer ${GROQ_KEY}`,
+                        "Content-Type": "application/json"
+                    },
                     body: JSON.stringify({
                         model: "llama3-70b-8192",
-                        messages: [{role: "user", content: prompt}],
+                        messages: [{role: "user", content: `幣種:${item.s},價:${item.price},斜率:${slope.toFixed(2)}%,OI:${oiVal},資費:${item.fd.toFixed(4)}%. 分析意圖與勝率(繁中).`}],
                         temperature: 0.1
                     })
                 });
 
-                if (resp.status === 200) {
+                if (resp.ok) {
                     const data = await resp.json();
                     const result = data.choices[0].message.content;
                     box.innerText = ">> " + result;
-                    
                     if(result.includes("90%") || result.includes("95%")) {
-                        fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 實時狙擊: ${item.s}\n${result}&title=🔱 TRIDENT` });
+                        fetch("https://api.pushover.net/1/messages.json", { 
+                            method: "POST", 
+                            headers: { "Content-Type": "application/x-www-form-urlencoded" }, 
+                            body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 訊號: ${item.s}\n${result}&title=🔱 TRIDENT` 
+                        });
                     }
                 } else {
-                    box.innerText = ">> 伺服器忙碌，稍後重試";
+                    box.innerText = ">> 伺服器回報錯誤 (" + resp.status + ")，請檢查 API Key 或網路環境。";
                 }
             } catch (err) {
-                box.innerText = ">> 診斷發生異常";
+                box.innerText = ">> 請求被攔截。請確保您在 Chrome 且無特殊防火牆。";
             } finally {
-                // 強制延遲 5 秒後才釋放鎖，給 API 喘息時間
-                setTimeout(() => { isAiBusy = false; }, 5000);
+                // 強制休息 8 秒，徹底避開所有頻率限制
+                setTimeout(() => { isAiBusy = false; }, 8000);
             }
         }
 

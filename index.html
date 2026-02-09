@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TRIDENT V7.2 - TrackTop10 + Pin + PerSymbol AI Refresh</title>
+  <title>TRIDENT V7.3 - Search+Pin+PerSymbol AI</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
@@ -48,9 +48,9 @@
     <div class="flex items-center gap-3">
       <span id="hb" class="heartbeat"></span>
       <div>
-        <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7.2</span></div>
+        <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7.3</span></div>
         <div class="tiny muted font-bold tracking-widest uppercase">
-          TRACK TOP10（上榜保留，更強才換）/ LONG ONLY / 排除 XAU XAG 外匯 / ✅釘選 / ✅單幣AI更新
+          TRACK TOP10（上榜保留，更強才換）/ LONG ONLY / 排除 XAU XAG 外匯 / ✅釘選 / ✅搜尋上榜 / ✅單幣AI更新
         </div>
       </div>
     </div>
@@ -64,6 +64,10 @@
         <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
         <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
       </select>
+
+      <!-- ✅ 搜尋上榜 -->
+      <input id="symSearch" type="text" class="w-[160px] uppercase" placeholder="搜尋幣 (ex: WIF)" />
+      <button class="btn btn-amber" onclick="searchAndAdd()">Search & 上榜</button>
 
       <button class="btn btn-green" onclick="testAI()">Test AI</button>
       <button class="btn btn-blue" onclick="runAIOnce(true)">Analyze Now</button>
@@ -154,6 +158,7 @@ const CONFIG = {
     replaceMargin: 3,
   },
 
+  // 你指定：不要市場市值前25（這裡用固定清單近似）
   TOPCAP_EXCLUDE: [
     "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","TONUSDT",
     "AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","POLUSDT","SHIBUSDT","1000SHIBUSDT",
@@ -161,11 +166,13 @@ const CONFIG = {
     "NEARUSDT","ARBUSDT","OPUSDT"
   ],
 
+  // 你指定：拿掉外匯、黃金白銀這些（用前綴排除）
   FX_COMMODITY_PREFIX: [
     "XAU","XAG","EUR","GBP","AUD","JPY","CHF","CAD","NZD",
     "BRL","TRY","RUB","ZAR","MXN","PLN","SEK","NOK","DKK","HKD","SGD"
   ],
 
+  // 穩定幣排除
   EXCLUDE_EXTRA: [
     "USDCUSDT","TUSDUSDT","FDUSDUSDT","USDPUSDT","DAIUSDT"
   ]
@@ -192,8 +199,10 @@ let candidatesTopN = [];
 
 let aiTop5 = [];
 let aiBySymbol = {};
-let aiHistoryBySymbol = {};      // ✅ 新增：每幣 AI 歷史（只存最後 2 筆）
-let pinnedSet = new Set();       // ✅ 新增：釘選集合（不被替換）
+let aiHistoryBySymbol = {};      // 每幣 AI 歷史（只留最後2筆）
+
+let pinnedSet = new Set();       // 釘選集合：不被替換
+let manualIncludeSet = new Set(); // ✅ 搜尋手動加入：強制納入 universe，不被刷新踢掉
 
 let pinnedTop1 = { symbol:null, score:-1, confidence:-1, ts:0 };
 
@@ -248,6 +257,7 @@ function hardReset() {
   aiBySymbol = {};
   aiHistoryBySymbol = {};
   pinnedSet = new Set();
+  manualIncludeSet = new Set();
   pinnedTop1 = { symbol:null, score:-1, confidence:-1, ts:0 };
   lastAiTs = 0;
   aiBackoffUntil = 0;
@@ -267,15 +277,31 @@ function hardReset() {
 function updatePinBadge() {
   $("pinN").textContent = String(pinnedSet.size);
 }
+
+/* ✅ pinned 數量控制：避免你釘太多導致 Top10 無法運作 */
+function enforcePinnedLimit() {
+  const maxPin = CONFIG.CANDIDATE_LIMIT;
+  if (pinnedSet.size <= maxPin) return;
+
+  // 自動解除最弱 pinned（以 preScore 最低者）
+  const pins = [...pinnedSet];
+  pins.sort((a,b) => (scoreOf(a) - scoreOf(b)));
+  const drop = pins[0];
+  pinnedSet.delete(drop);
+  console.warn("[PIN] pinned 超過上限，自動解除最弱 pinned:", drop);
+  updatePinBadge();
+}
+
 function togglePin(sym) {
   if (pinnedSet.has(sym)) pinnedSet.delete(sym);
   else pinnedSet.add(sym);
+
+  enforcePinnedLimit();
   updatePinBadge();
+
   // 釘了就確保它在 trackedTopN（若存在 state）
-  if (symState[sym] && !trackedTopN.includes(sym)) {
-    trackedTopN.push(sym);
-  }
-  // 立即重畫
+  if (pinnedSet.has(sym) && symState[sym] && !trackedTopN.includes(sym)) trackedTopN.push(sym);
+
   if (aiTop5.length) renderTop5Cards();
 }
 
@@ -330,6 +356,7 @@ async function refreshExchangeInfo() {
   }
   allowedPerpSet = set;
 }
+
 async function refreshPremiumAll() {
   const data = await fetchJSON("https://fapi.binance.com/fapi/v1/premiumIndex");
   const map = {};
@@ -346,6 +373,7 @@ async function refreshPremiumAll() {
   }
   premiumMap = map;
 }
+
 async function refreshUniverse() {
   if (!allowedPerpSet) await refreshExchangeInfo().catch(()=>{});
 
@@ -362,17 +390,28 @@ async function refreshUniverse() {
     .slice(0, CONFIG.UNIVERSE_LIMIT)
     .map(x => x.symbol);
 
+  // ✅ 手動搜尋加入：強制納入 universe（避免 5 分鐘刷新後被踢掉）
+  for (const sym of Array.from(manualIncludeSet)) {
+    if (allowedPerpSet && !allowedPerpSet.has(sym)) continue;
+    if (CONFIG.TOPCAP_EXCLUDE.includes(sym)) continue;
+    if (CONFIG.EXCLUDE_EXTRA.includes(sym)) continue;
+    if (isFxCommodity(sym)) continue;
+    if (!filtered.includes(sym)) filtered.push(sym);
+  }
+
   universe = filtered;
   $("universeN").textContent = universe.length;
 
   const uSet = new Set(universe);
 
-  // 移除不在 universe 的 WS/state（但如果 pinned 的幣被踢出 universe，就自動 unpin）
+  // 如果 pinned 的幣不在 universe，解除 pinned（避免殭屍）
   for (const sym of Array.from(pinnedSet)) {
     if (!uSet.has(sym)) pinnedSet.delete(sym);
   }
+  enforcePinnedLimit();
   updatePinBadge();
 
+  // 移除不在 universe 的 WS/state
   Object.keys(wsAgg).forEach(sym => {
     if (!uSet.has(sym)) {
       try { wsAgg[sym].close(); } catch {}
@@ -382,6 +421,7 @@ async function refreshUniverse() {
     }
   });
 
+  // init state + ws
   for (const sym of universe) {
     if (!wsAgg[sym]) initAggTrade(sym);
     if (!symState[sym]) initSymbolState(sym);
@@ -805,10 +845,7 @@ function deriveSymbol(sym) {
 }
 
 /* ===========================
-   ✅ Tracking Top10 + Pin protection (核心需求)
-   - 上榜保留
-   - 更強才換
-   - pinned 不會被換掉（除非你手動 unpin）
+   ✅ Tracking Top10 + Pin protection
 =========================== */
 function scoreOf(sym) { return (symState[sym]?.preScore ?? 0); }
 
@@ -824,16 +861,14 @@ function updateTrackedTopN(eligibleStates) {
     if (symState[ps] && !trackedTopN.includes(ps)) trackedTopN.push(ps);
   }
 
-  // 排序（高→低）
   trackedTopN.sort((a,b) => scoreOf(b) - scoreOf(a));
 
-  // helper：找出「可被替換」的榜尾（最弱的非 pinned）
   const findReplaceableWeak = () => {
-    const arr = [...trackedTopN].sort((a,b) => scoreOf(a) - scoreOf(b)); // 弱→強
+    const arr = [...trackedTopN].sort((a,b) => scoreOf(a) - scoreOf(b));
     for (const sym of arr) {
       if (!pinnedSet.has(sym)) return sym;
     }
-    return null; // 全部都 pinned
+    return null;
   };
 
   for (const s of eligibleStates) {
@@ -847,7 +882,7 @@ function updateTrackedTopN(eligibleStates) {
     }
 
     const weakSym = findReplaceableWeak();
-    if (!weakSym) continue; // 全 pinned，誰也換不了
+    if (!weakSym) continue;
 
     const weakScore = scoreOf(weakSym);
     const newScore = scoreOf(sym);
@@ -859,8 +894,10 @@ function updateTrackedTopN(eligibleStates) {
     }
   }
 
+  // 若 pinned 太多，enforcePinnedLimit() 會處理
+  enforcePinnedLimit();
+
   if (trackedTopN.length > keepN) {
-    // 若超過，優先保留 pinned，再按分數補齊
     const pinnedArr = trackedTopN.filter(x => pinnedSet.has(x));
     const others = trackedTopN.filter(x => !pinnedSet.has(x)).sort((a,b)=>scoreOf(b)-scoreOf(a));
     trackedTopN = [...pinnedArr, ...others].slice(0, keepN);
@@ -1035,7 +1072,6 @@ JSON 格式：
   ];
 }
 
-/* ✅ 新增：單幣更新 prompt（帶上一次建議 + 現在摘要） */
 function buildAiPromptSingle(symbol, currentSummary, prevAdvice) {
   const system = `
 你是加密合約「只做多」交易助手。請全部用中文輸出。
@@ -1190,7 +1226,6 @@ async function runAIOnce(force=false) {
       by[sym] = norm;
       picks.push(norm);
 
-      // ✅ 記錄 history（只存最後 2 筆）
       aiHistoryBySymbol[sym] = (aiHistoryBySymbol[sym] || []).slice(-1);
       aiHistoryBySymbol[sym].push({ ts: Date.now(), advice: norm });
 
@@ -1257,14 +1292,12 @@ async function runAISingle(symbol) {
   if (!key) return alert("請先輸入 Groq Key");
   const model = $("modelSel").value;
 
-  // 確保資料最新：Kline/OI + VP
   await ensureKlinesAndOI(sym);
   await refreshTodayVP(sym);
 
   const current = buildSummary(sym);
   if (!current) return alert("summary 生成失敗（可能價格還沒到）");
 
-  // previous：用 aiBySymbol 或 history 最後一筆
   const prev = aiBySymbol[sym] || (aiHistoryBySymbol[sym]?.slice(-1)?.[0]?.advice ?? null);
 
   setStatus("aiStatus", `單幣更新中：${sym} …`, "warn");
@@ -1273,17 +1306,13 @@ async function runAISingle(symbol) {
     const messages = buildAiPromptSingle(sym, current, prev);
     const obj = await groqChatCompletion({ apiKey:key, model, messages, maxOut: 400 });
 
-    // obj 是單幣格式
     const norm = normalizeAiPick(sym, current, obj);
 
-    // ✅ 更新對應顯示
     aiBySymbol[sym] = norm;
 
-    // history
     aiHistoryBySymbol[sym] = (aiHistoryBySymbol[sym] || []).slice(-1);
     aiHistoryBySymbol[sym].push({ ts: Date.now(), advice: norm });
 
-    // 如果它本來就在 top5，也同步更新 top5 的那一筆
     const idx = aiTop5.findIndex(x => x.symbol === sym);
     if (idx >= 0) {
       aiTop5[idx] = norm;
@@ -1323,6 +1352,82 @@ async function testAI() {
     setStatus("aiStatus", "Test FAIL", "bad");
     alert("Test AI FAIL: " + (e?.message || e));
   }
+}
+
+/* ===========================
+   ✅ 搜尋：搜到就上榜 + 釘選 + 立刻 AI 建議
+=========================== */
+function normSymbol(input) {
+  let s = (input || "").trim().toUpperCase();
+  if (!s) return "";
+  if (!s.endsWith("USDT")) s = s + "USDT";
+  return s;
+}
+
+async function searchAndAdd() {
+  const raw = $("symSearch")?.value || "";
+  const sym = normSymbol(raw);
+  if (!sym) return alert("請輸入幣種，例如 WIF 或 WIFUSDT");
+
+  if (isFxCommodity(sym)) return alert("已排除外匯 / 黃金白銀類：" + sym);
+  if (CONFIG.TOPCAP_EXCLUDE.includes(sym)) return alert("已排除大市值前25：" + sym);
+  if (CONFIG.EXCLUDE_EXTRA.includes(sym)) return alert("已排除穩定幣：" + sym);
+
+  try {
+    if (!allowedPerpSet) await refreshExchangeInfo();
+    if (allowedPerpSet && !allowedPerpSet.has(sym)) {
+      return alert("這不是 USDT 永續合約或不可交易：" + sym);
+    }
+  } catch {}
+
+  // 強制納入 universe（避免 5 分鐘刷新被踢）
+  manualIncludeSet.add(sym);
+
+  // 確保 state + ws
+  if (!universe.includes(sym)) universe.push(sym);
+  if (!symState[sym]) initSymbolState(sym);
+  if (!wsAgg[sym]) initAggTrade(sym);
+
+  // 釘選（避免被替換踢掉）
+  pinnedSet.add(sym);
+  enforcePinnedLimit();
+  updatePinBadge();
+
+  // 強制進 Top10 追蹤列表（必要時踢弱者）
+  if (!trackedTopN.includes(sym)) trackedTopN.push(sym);
+  trackedTopN.sort((a,b) => scoreOf(b) - scoreOf(a));
+
+  while (trackedTopN.length > CONFIG.CANDIDATE_LIMIT) {
+    const weak = [...trackedTopN].sort((a,b)=>scoreOf(a)-scoreOf(b)).find(x => !pinnedSet.has(x));
+    if (!weak) break;
+    trackedTopN = trackedTopN.filter(x => x !== weak);
+  }
+
+  // 先拉一次必要資料，再顯示卡片，再跑 AI
+  await ensureKlinesAndOI(sym);
+  await refreshTodayVP(sym);
+
+  const sum = buildSummary(sym);
+  if (sum) {
+    const placeholder = normalizeAiPick(sym, sum, { score: sum.preScore, confidence: 55, eta_minutes: "10-30", stage: sum.stage });
+    aiBySymbol[sym] = placeholder;
+
+    if (!aiTop5.find(x => x.symbol === sym)) aiTop5.unshift(placeholder);
+    aiTop5.sort((a,b) => (b.score-a.score) || (b.confidence-a.confidence));
+
+    while (aiTop5.length > CONFIG.TOP5_LIMIT) {
+      const weak = [...aiTop5].sort((a,b)=>a.score-b.score).find(x => !pinnedSet.has(x.symbol));
+      if (!weak) break;
+      aiTop5 = aiTop5.filter(x => x.symbol !== weak.symbol);
+    }
+
+    renderTop5Cards();
+  }
+
+  // 立刻單幣 AI 更新（previous+current）
+  try { await runAISingle(sym); } catch {}
+
+  $("symSearch").value = "";
 }
 
 /* ===========================
@@ -1458,7 +1563,7 @@ function renderTop5Cards() {
 }
 
 /* ===========================
-   miniTicker
+   miniTicker（只用來更新 UI 時間戳）
 =========================== */
 function startMiniTicker() {
   const ws = new WebSocket("wss://fstream.binance.com/ws/!miniTicker@arr");
@@ -1483,6 +1588,12 @@ async function boot() {
   loadKey();
   $("autoLbl").textContent = `Auto AI: ${AUTO_AI ? "ON" : "OFF"}`;
   updatePinBadge();
+
+  // Enter 支援
+  setTimeout(() => {
+    const inp = $("symSearch");
+    if (inp) inp.addEventListener("keypress", (e) => { if (e.key === "Enter") searchAndAdd(); });
+  }, 0);
 
   setStatus("binStatus","初始化…","warn");
   setStatus("aiStatus","-","muted");

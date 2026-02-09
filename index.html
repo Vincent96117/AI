@@ -110,13 +110,13 @@ const CFG = {
   W_ALIGN: 0.6,
 
   // Gemini cost-control
-  GEMINI_MODELF: {
-    MODEL: "gemini-2.5-flash",
-    TOPK: 3,                 // ✅ 只分析 Top5 中最高分的前 2~3 支（改這裡）
-    MAX_OUTPUT_TOKENS: 400,   // ✅ 限制輸出長度
-    TEMP: 0.2,
-    AUTO_INTERVAL_MS: 120000, // ✅ 每2分鐘最多跑一次
-    AUTO_CHECK_MS: 30000,
+ GEMINIF: {
+  MODEL: "gemini-2.5-flash",
+  TOPK: 3,
+  MAX_OUTPUT_TOKENS: 400,
+  TEMP: 0.2,
+  AUTO_INTERVAL_MS: 120000,
+  AUTO_CHECK_MS: 30000,
   },
 
   // Robust Z warmup

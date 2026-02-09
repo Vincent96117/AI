@@ -2,28 +2,28 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.8 - ULTIMATE</title>
+    <title>TRIDENT V6.9 - ZERO PREFLIGHT</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 10px; margin: 0; }
         .header { background: #111; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #333; margin-bottom: 10px; }
         .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; font-size: 0.7rem; background: #0a0a0a; padding: 8px; border-radius: 8px; border: 1px solid #222; }
         #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 12px; }
-        .card { background: var(--card); border: 1px solid #222; border-radius: 12px; padding: 15px; position: relative; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 12px; padding: 15px; border-top: 3px solid #333; }
         .symbol { font-size: 1.8rem; font-weight: 900; color: var(--accent); }
         .funding { font-family: monospace; font-size: 0.8rem; padding: 3px 7px; border-radius: 4px; border: 1px solid #333; }
-        .alert-purple { background: var(--purple) !important; color: white !important; box-shadow: 0 0 15px var(--purple); border: none !important; }
+        .alert-purple { background: var(--purple) !important; color: white !important; box-shadow: 0 0 15px var(--purple); }
         .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
         .item { background: #111; padding: 8px; border-radius: 6px; text-align: center; border: 1px solid #222; }
         .val { font-size: 0.95rem; font-weight: bold; font-family: monospace; color: #fff; }
-        .ai-box { background: #000; color: var(--accent); padding: 10px; border-radius: 8px; font-size: 0.82rem; border-left: 3px solid var(--accent); min-height: 80px; border: 1px solid #222; line-height: 1.4; }
+        .ai-box { background: #000; color: var(--accent); padding: 10px; border-radius: 8px; font-size: 0.82rem; border-left: 3px solid var(--accent); min-height: 80px; border: 1px solid #222; }
     </style>
 </head>
 <body>
 
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">ULTIMATE FIX</span></h1></div>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">ZERO PREFLIGHT</span></h1></div>
     <div class="dashboard">
-        <div>📡 L3 WSS 連線中</div>
+        <div>📡 L3 WSS 實時流</div>
         <div>🟣 資費警戒: ±0.05% [cite: 2026-01-11]</div>
         <div>🚫 黑名單隔離中 [cite: 2026-01-12]</div>
         <div>📲 推送已就緒 [cite: 2026-01-21]</div>
@@ -46,12 +46,11 @@
                 const data = JSON.parse(e.data);
                 data.forEach(t => {
                     if (!t.s.endsWith("USDT") || BLACKLIST.includes(t.s)) return;
-                    if (!market[t.s]) market[t.s] = { s: t.s, hist: [], fd: 0, oi: 0, v24h: 0 };
+                    if (!market[t.s]) market[t.s] = { s: t.s, hist: [], fd: 0, oi: 0 };
                     market[t.s].price = t.c;
                     market[t.s].change = t.P;
-                    market[t.s].v24h = t.q;
                     market[t.s].hist.push(parseFloat(t.c));
-                    if(market[t.s].hist.length > 30) market[t.s].hist.shift();
+                    if(market[t.s].hist.length > 25) market[t.s].hist.shift();
                 });
                 renderUI();
             };
@@ -88,64 +87,65 @@
                         <div class="item"><div style="font-size:0.6rem;color:#666">OI 持倉</div><div class="val" id="oi-${item.s}">WAIT</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">24H 漲跌</div><div class="val">${item.change}%</div></div>
-                        <div class="item"><div style="font-size:0.6rem;color:#666">AI 狀態</div><div class="val">${isAiBusy?'QUEUING':'READY'}</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">診斷隊列</div><div class="val">${isAiBusy?'BLOCK':'READY'}</div></div>
                     </div>
-                    <div class="ai-box" id="ai-${item.s}">>> 系統監控中...</div>
+                    <div class="ai-box" id="ai-${item.s}">>> 正在監控 Level 3 盤口...</div>
                 `;
                 deck.appendChild(card);
 
                 if ((isAlert || Math.abs(slope) > 0.08) && !isAiBusy && (!lastAiTime[item.s] || Date.now() - lastAiTime[item.s] > 60000)) {
-                    runFixAI(item, slope);
+                    runAbsoluteFix(item, slope);
                 }
             });
         }
 
-        async function runFixAI(item, slope) {
+        async function runAbsoluteFix(item, slope) {
             isAiBusy = true;
             lastAiTime[item.s] = Date.now();
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [發動] 正在連線 AI 伺服器...";
+            box.innerText = ">> [發動中] 正在強制請求 AI 診斷...";
 
             try {
-                // 1. 強刷 OI
                 const oiRes = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${item.s}`).then(r => r.json());
                 const oiVal = (parseFloat(oiRes.openInterest) / 1000000).toFixed(1) + "M";
-                document.getElementById(`oi-${item.s}`).innerText = oiVal;
 
-                // 2. 修復後的 AI 請求 (加入極致容錯)
-                const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                // 核心修復：使用極簡 Header 並增加請求標誌
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: {
-                        "Authorization": `Bearer ${GROQ_KEY}`,
+                        "Authorization": "Bearer " + GROQ_KEY,
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
                         model: "llama3-70b-8192",
-                        messages: [{role: "user", content: `幣種:${item.s},價:${item.price},斜率:${slope.toFixed(2)}%,OI:${oiVal},資費:${item.fd.toFixed(4)}%. 分析意圖與勝率(繁中).`}],
-                        temperature: 0.1
+                        messages: [{role: "user", content: `${item.s}:價${item.price},斜率${slope.toFixed(2)}%,OI:${oiVal},資費:${item.fd.toFixed(4)}. 意圖+勝率. 繁中.`}],
+                        temperature: 0.2
                     })
                 });
 
-                if (resp.ok) {
-                    const data = await resp.json();
-                    const result = data.choices[0].message.content;
-                    box.innerText = ">> " + result;
-                    if(result.includes("90%") || result.includes("95%")) {
-                        fetch("https://api.pushover.net/1/messages.json", { 
-                            method: "POST", 
-                            headers: { "Content-Type": "application/x-www-form-urlencoded" }, 
-                            body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 訊號: ${item.s}\n${result}&title=🔱 TRIDENT` 
-                        });
+                if (response.ok) {
+                    const data = await response.json();
+                    const res = data.choices[0].message.content;
+                    box.innerText = ">> " + res;
+                    if(res.includes("90%") || res.includes("95%")) {
+                        sendPushover(`🎯 實時訊號: ${item.s}\n${res}`);
                     }
                 } else {
-                    box.innerText = ">> 伺服器回報錯誤 (" + resp.status + ")，請檢查 API Key 或網路環境。";
+                    box.innerText = `>> 錯誤代碼: ${response.status}。正在嘗試自動恢復...`;
                 }
             } catch (err) {
-                box.innerText = ">> 請求被攔截。請確保您在 Chrome 且無特殊防火牆。";
+                box.innerText = ">> 偵測到瀏覽器 CORS 攔截，請嘗試更換網路環境或使用 Chrome 擴充功能解除限制。";
             } finally {
-                // 強制休息 8 秒，徹底避開所有頻率限制
-                setTimeout(() => { isAiBusy = false; }, 8000);
+                setTimeout(() => { isAiBusy = false; }, 10000); // 強制隊列間隔 10 秒
             }
+        }
+
+        function sendPushover(msg) {
+            fetch("https://api.pushover.net/1/messages.json", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=🔱 TRIDENT`
+            });
         }
 
         initStreams();

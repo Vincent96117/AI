@@ -2,42 +2,42 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.5 - PURE SIGNAL</title>
+    <title>TRIDENT V6.5 - FINAL REPAIR</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; --warn: #ff3e3e; }
         body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 15px; }
         .header { background: #1a1a1a; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 10px; }
-        .monitor-bar { background: #111; padding: 8px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-around; font-size: 0.75rem; color: #888; border: 1px dashed #444; }
-        .dot { height: 8px; width: 8px; background-color: #555; border-radius: 50%; display: inline-block; margin-right: 5px; }
-        .dot.active { background-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+        .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; font-size: 0.75rem; background: #111; padding: 10px; border-radius: 8px; border: 1px solid #222; }
         #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
-        .card { background: var(--card); border: 2px solid #222; border-radius: 18px; padding: 20px; position: relative; transition: 0.3s; }
-        .symbol { font-size: 2.1rem; font-weight: 900; color: var(--accent); }
-        .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; border: 1px solid #444; }
-        .alert-purple { border-color: var(--purple) !important; color: var(--purple) !important; font-weight: bold; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+        .card { background: var(--card); border: 2px solid #222; border-radius: 18px; padding: 18px; position: relative; }
+        .symbol { font-size: 2rem; font-weight: 900; color: var(--accent); }
+        .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 8px; border-radius: 5px; border: 1px solid #444; }
+        .alert-purple { background: var(--purple) !important; color: white !important; box-shadow: 0 0 15px var(--purple); }
+        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
         .item { background: #151515; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #222; }
-        .val { font-size: 1rem; font-weight: bold; font-family: monospace; }
-        .ai-box { background: #000; color: var(--accent); padding: 15px; border-radius: 10px; font-size: 0.85rem; border-left: 4px solid var(--accent); min-height: 90px; white-space: pre-wrap; }
+        .val { font-size: 1rem; font-weight: bold; font-family: monospace; color: #fff; }
+        .ai-box { background: #000; color: var(--accent); padding: 12px; border-radius: 10px; font-size: 0.82rem; border-left: 4px solid var(--accent); min-height: 80px; white-space: pre-wrap; margin-top: 10px; }
+        .signal-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; background: #333; }
+        .active-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1 style="margin:0; letter-spacing:4px;">🔱 TRIDENT <span style="color:var(--accent)">PURE SIGNAL</span></h1>
-        <div style="font-size:0.7rem; color:#666; margin-top:5px;">核心監控：量縮 + OI 增加 + 型態診斷</div>
+        <h1 style="margin:0; letter-spacing:4px;">🔱 TRIDENT <span style="color:var(--accent)">V6.5 FINAL</span></h1>
     </div>
 
-    <div class="monitor-bar">
-        <div><span id="wss-dot" class="dot"></span>WSS: <span id="wss-status" style="color:var(--accent)">ACTIVE</span></div>
-        <div>🚫 黑名單攔截中 [cite: 2026-01-12]</div>
-        <div>🎯 AI 觸發條件：量縮 < 70% 或 1M 斜率 > 0.1%</div>
+    <div class="dashboard">
+        <div><span id="dot-wss" class="signal-dot"></span> WSS 流量：<span id="stat-wss" style="color:var(--accent)">0</span></div>
+        <div>📡 API 狀態：<span id="stat-api" style="color:var(--accent)">穩定監控</span></div>
+        <div>🚫 黑名單：<span style="color:var(--warn)">BTC, ETH 等已隔離 [cite: 2026-01-12]</span></div>
+        <div>⏳ 下次更新：<span id="stat-timer" style="color:#fff">--</span></div>
     </div>
 
     <div id="sniper-deck"></div>
 
     <script>
-        // [cite: 2026-01-21] 密鑰注入
+        // [cite: 2026-01-21]
         const PUSHOVER_USER = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
         const PUSHOVER_TOKEN = "acyoe3sz15x4n91r1349fdcau7x6pw";
         const GROQ_KEY = "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";
@@ -45,89 +45,99 @@
         
         let market = {};
         let aiLock = false;
+        let wssCount = 0;
 
-        // 1. WebSocket 實時價格與主動買入監控
+        // 1. WebSocket 引擎 (L3 價格流)
         function initWSS() {
             const ws = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
             ws.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                const dot = document.getElementById('wss-dot');
-                dot.classList.add('active'); setTimeout(() => dot.classList.remove('active'), 100);
+                const dot = document.getElementById('dot-wss');
+                dot.classList.add('active-dot'); setTimeout(() => dot.classList.remove('active-dot'), 100);
+                wssCount += data.length;
 
                 data.forEach(t => {
                     if (!t.s.endsWith("USDT") || BLACKLIST.includes(t.s)) return;
-                    if (!market[t.s]) market[t.s] = { symbol: t.s, history: [] };
+                    if (!market[t.s]) market[t.s] = { symbol: t.s, history: [], volHistory: [] };
                     market[t.s].price = t.c;
                     market[t.s].change = t.P;
-                    market[t.s].vol = t.q; // 成交額
-                    // 記錄價格序列用於斜率分析
+                    market[t.s].v = t.q; // 成交額
                     market[t.s].history.push(parseFloat(t.c));
-                    if(market[t.s].history.length > 20) market[t.s].history.shift();
+                    market[t.s].volHistory.push(parseFloat(t.q));
+                    if(market[t.s].history.length > 30) market[t.s].history.shift();
                 });
                 renderUI();
             };
+            document.getElementById('stat-wss').innerText = wssCount;
             ws.onclose = () => setTimeout(initWSS, 5000);
         }
 
-        // 2. 定期補充 Level 3 數據 (OI 與資費)
-        async function fetchL3Metrics() {
+        // 2. 修復後的數據補充 (OI 與資費)
+        let timer = 1;
+        async function fetchMetrics() {
             try {
-                const [pIndex, oiData, klines] = await Promise.all([
-                    fetch("https://fapi.binance.com/fapi/v1/premiumIndex").then(r => r.json()),
-                    fetch("https://fapi.binance.com/fapi/v1/openInterest/list").then(r => r.json())
-                ]);
-                pIndex.forEach(i => { if(market[i.symbol]) market[i.symbol].funding = parseFloat(i.lastFundingRate)*100; });
-                oiData.forEach(i => { if(market[i.symbol]) market[i.symbol].oi = parseFloat(i.openInterest); });
-                setTimeout(fetchL3Metrics, 15000);
-            } catch (e) {}
+                // 這裡我們只抓一組大的 Premium Index，減少 API 壓力
+                const pIndex = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex").then(r => r.json());
+                pIndex.forEach(i => {
+                    if(market[i.symbol]) {
+                        market[i.symbol].funding = parseFloat(i.lastFundingRate) * 100;
+                    }
+                });
+                // 分批異步抓取熱門幣的 OI
+                const topSymbols = Object.values(market).sort((a,b) => b.v - a.v).slice(0, 15);
+                for(let s of topSymbols) {
+                    const oi = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${s.symbol}`).then(r => r.json());
+                    market[s.symbol].oi = parseFloat(oi.openInterest);
+                }
+            } catch (e) { document.getElementById('stat-api').innerText = "API 頻率限制中"; }
+            timer = 20;
         }
 
-        // 3. UI 與硬規則過濾
+        setInterval(() => {
+            timer--;
+            document.getElementById('stat-timer').innerText = timer + "s";
+            if(timer <= 0) fetchMetrics();
+        }, 1000);
+
+        // 3. UI 渲染與全要素餵食
         function renderUI() {
             const sorted = Object.values(market)
-                .filter(i => i.price && i.oi)
-                .sort((a, b) => (b.oi) - (a.oi)) // 按持倉量排序前三名
+                .filter(i => i.price && i.funding)
+                .sort((a, b) => (Math.abs(b.funding)*100 + Math.abs(b.change)) - (Math.abs(a.funding)*100 + Math.abs(a.change)))
                 .slice(0, 3);
 
             const deck = document.getElementById('sniper-deck');
             deck.innerHTML = "";
 
             sorted.forEach(item => {
-                // 計算 1M 加速度 (斜率)
-                const slope = item.history.length > 10 ? (item.history[item.history.length-1] - item.history[0]) / item.history[0] * 100 : 0;
-                const isFundingAlert = Math.abs(item.funding) >= 0.05; // [cite: 2026-01-11]
+                const isAlert = Math.abs(item.funding) >= 0.05; // [cite: 2026-01-11]
+                const slope = item.history.length > 5 ? ((item.history[item.history.length-1] - item.history[0]) / item.history[0] * 100) : 0;
                 
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span class="symbol">${item.symbol}</span>
-                        <span class="funding ${isFundingAlert ? 'alert-purple' : ''}">FD: ${item.funding?.toFixed(4) || 0}%</span>
+                        <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.funding.toFixed(4)}%</span>
                     </div>
-                    <div class="grid">
-                        <div class="item"><div style="font-size:0.65rem;color:#666">OI 持倉</div><div class="val">${(item.oi / 1000000).toFixed(2)}M</div></div>
-                        <div class="item"><div style="font-size:0.65rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
-                        <div class="item"><div style="font-size:0.65rem;color:#666">實時價格</div><div class="val">$${parseFloat(item.price)}</div></div>
-                        <div class="item"><div style="font-size:0.65rem;color:#666">成交額</div><div class="val">${(item.vol / 1000000).toFixed(1)}M</div></div>
+                    <div class="data-grid">
+                        <div class="item"><div style="font-size:0.6rem;color:#666">OI (持倉)</div><div class="val">${item.oi ? (item.oi/1000000).toFixed(2) : '--'}M</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">成交額</div><div class="val">${(item.v/1000000).toFixed(1)}M</div></div>
+                        <div class="item"><div style="font-size:0.65rem;color:#888">變盤狀態</div><div class="val" style="color:${isAlert?'var(--purple)':'#555'}">${isAlert?'觸發診斷':'監控中'}</div></div>
                     </div>
-                    <div class="ai-box" id="ai-${item.symbol}">>> 監控量價型態中...</div>
+                    <div class="ai-box" id="ai-${item.symbol}">>> L3 數據收集中... 符合斜率或資費門檻將自動診斷</div>
                 `;
                 deck.appendChild(card);
 
-                // --- 真正硬規則：只要有波動或是資費異常，立刻餵 AI ---
-                if ((Math.abs(slope) > 0.08 || isFundingAlert) && !aiLock) {
-                    askAI(item, slope);
-                }
+                if ((isAlert || Math.abs(slope) > 0.05) && !aiLock) askAI(item, slope);
             });
         }
 
         async function askAI(item, slope) {
             aiLock = true;
             try {
-                const prompt = `你是冷酷狙擊手。分析 ${item.symbol}：價格 ${item.price}, 1M斜率 ${slope.toFixed(4)}%, OI ${item.oi}M, 資費 ${item.funding}%。
-                數據序列:${JSON.stringify(item.history)}。
-                任務：1.識別型態 2.主力意圖 3.表態方向 4.噴發倒數 5.勝率。繁體中文。`;
-
+                const prompt = `你是加密狙擊手。分析 ${item.symbol}：價格 ${item.price}, 1M斜率 ${slope.toFixed(4)}%, OI ${item.oi}M, 資費 ${item.funding}%。任務：1.識別型態 2.意圖 3.表態方向 4.噴發倒數 5.勝率。繁體中文。`;
                 const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
@@ -136,17 +146,15 @@
                 const d = await resp.json();
                 const res = d.choices[0].message.content;
                 document.getElementById(`ai-${item.symbol}`).innerText = ">> " + res;
-                
-                // [cite: 2026-01-21]
                 if(res.includes("90%") || res.includes("95%")) {
-                    fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 變盤訊號: ${item.symbol}\n${res}&title=🔱 TRIDENT ALERT` });
+                    fetch("https://api.pushover.net/1/messages.json", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 變盤警告: ${item.symbol}\n${res}&title=🔱 TRIDENT ALERT` });
                 }
             } catch (e) {}
-            setTimeout(() => { aiLock = false; }, 8000); 
+            setTimeout(() => { aiLock = false; }, 8000);
         }
 
         initWSS();
-        fetchL3Metrics();
+        fetchMetrics();
     </script>
 </body>
 </html>

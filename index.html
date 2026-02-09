@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.5 - SOUL REPAIR</title>
+    <title>TRIDENT V6.5 - FINAL FORM</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; --warn: #ff3e3e; }
         body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 15px; }
@@ -21,24 +21,23 @@
 </head>
 <body>
 
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">SOUL REPAIR</span></h1></div>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">FINAL FORM</span></h1></div>
     <div class="dashboard">
-        <div>📡 L3 監控中</div>
-        <div>🎯 模式：過濾後精確抓取</div>
+        <div>📡 L3 連線中</div>
         <div>🚫 黑名單：隔離主流幣 [cite: 2026-01-12]</div>
+        <div>🟣 資費警戒：±0.05% [cite: 2026-01-11]</div>
         <div>📲 推送：勝率 90% 響鈴 [cite: 2026-01-21]</div>
     </div>
     <div id="sniper-deck"></div>
 
     <script>
-        // [cite: 2026-01-21, 2026-01-11, 2026-01-12] 嚴格執行
         const PUSHOVER_USER = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
         const PUSHOVER_TOKEN = "acyoe3sz15x4n91r1349fdcau7x6pw";
         const GROQ_KEY = "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";
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
         
         let market = {};
-        let aiLock = {}; // 改為單幣鎖定，效率更高
+        let aiCooldown = {}; // 防止 400 報錯頻發
 
         function initWSS() {
             const ws = new WebSocket("wss://fstream.binance.me/ws/!ticker@arr");
@@ -50,8 +49,9 @@
                     market[t.s].price = t.c;
                     market[t.s].change = t.P;
                     market[t.s].v = t.q;
-                    market[t.s].history.push(parseFloat(t.c).toFixed(6));
-                    if(market[t.s].history.length > 20) market[t.s].history.shift();
+                    // 強制格式化價格歷史，避免大體積 JSON
+                    market[t.s].history.push(parseFloat(t.c).toFixed(4));
+                    if(market[t.s].history.length > 15) market[t.s].history.shift();
                 });
                 renderUI();
             };
@@ -62,7 +62,7 @@
                 const pIndex = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex").then(r => r.json());
                 pIndex.forEach(i => { if(market[i.symbol]) market[i.symbol].funding = parseFloat(i.lastFundingRate)*100; });
             } catch (e) {}
-            setTimeout(syncFunding, 15000);
+            setTimeout(syncFunding, 10000);
         }
 
         async function fetchOI(symbol) {
@@ -84,39 +84,40 @@
 
             sorted.forEach(item => {
                 const slope = item.history.length > 5 ? ((item.history[item.history.length-1] - item.history[0]) / item.history[0] * 100) : 0;
-                const isFundingAlert = Math.abs(item.funding) >= 0.05; // [cite: 2026-01-11]
+                const isAlert = Math.abs(item.funding) >= 0.05;
 
-                if (isFundingAlert || Math.abs(slope) > 0.04) fetchOI(item.symbol);
+                if (isAlert || Math.abs(slope) > 0.04) fetchOI(item.symbol);
 
                 const card = document.createElement('div');
                 card.className = 'card';
-                if(isFundingAlert) card.style.borderColor = 'var(--purple)';
+                if(isAlert) card.style.borderColor = 'var(--purple)';
                 card.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span class="symbol">${item.symbol}</span>
-                        <span class="funding ${isFundingAlert ? 'alert-purple' : ''}">FD: ${item.funding.toFixed(4)}%</span>
+                        <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.funding.toFixed(4)}%</span>
                     </div>
                     <div class="data-grid">
-                        <div class="item"><div style="font-size:0.6rem;color:#666">OI 持倉</div><div class="val">${item.oi?(item.oi/1000000).toFixed(2):'SCAN'}M</div></div>
+                        <div class="item"><div style="font-size:0.6rem;color:#666">OI 持倉</div><div class="val">${item.oi?(item.oi/1000000).toFixed(1):'SCAN'}M</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">1M 斜率</div><div class="val" style="color:var(--accent)">${slope.toFixed(3)}%</div></div>
                         <div class="item"><div style="font-size:0.6rem;color:#666">24H 漲跌</div><div class="val">${item.change}%</div></div>
                         <div class="item"><div style="font-size:0.65rem;color:#888">AI 狀態</div><div class="val">${item.oi?'READY':'WAIT'}</div></div>
                     </div>
-                    <div class="ai-box" id="ai-${item.symbol}">>> 等待診斷中...</div>
+                    <div class="ai-box" id="ai-${item.symbol}">>> 等待診斷...</div>
                 `;
                 deck.appendChild(card);
 
-                // 觸發 AI：有 OI 數據 + (資費警告 或 斜率明顯)
-                if (item.oi && (isFundingAlert || Math.abs(slope) > 0.06) && !aiLock[item.symbol]) {
+                // 觸發 AI：數據齊全 + (資費 0.05% 或 斜率 > 0.08)
+                if (item.oi && (isAlert || Math.abs(slope) > 0.08) && !aiCooldown[item.symbol]) {
                     askAI(item, slope);
                 }
             });
         }
 
         async function askAI(item, slope) {
-            aiLock[item.symbol] = true;
+            aiCooldown[item.symbol] = true;
             try {
-                const prompt = `你是冷酷狙擊手。分析 ${item.symbol}：價 ${item.price}, 斜率 ${slope.toFixed(4)}%, OI ${(item.oi/1000000).toFixed(2)}M, 資費 ${item.funding.toFixed(4)}%。分析型態、意圖與勝率。繁體中文。`;
+                // 極簡化 Prompt，防止 400 報錯
+                const prompt = `Symbol: ${item.symbol}, Price: ${item.price}, Slope: ${slope.toFixed(4)}, OI: ${item.oi}, FD: ${item.funding.toFixed(4)}. 分析型態與勝率(繁中)`;
                 const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
@@ -126,6 +127,9 @@
                         temperature: 0.1
                     })
                 });
+                
+                if (!resp.ok) throw new Error("HTTP 400");
+
                 const d = await resp.json();
                 const res = d.choices[0].message.content;
                 document.getElementById(`ai-${item.symbol}`).innerText = ">> " + res;
@@ -137,8 +141,11 @@
                         body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 訊號: ${item.symbol}\n${res}&title=🔱 TRIDENT` 
                     });
                 }
-            } catch (e) {}
-            setTimeout(() => { aiLock[item.symbol] = false; }, 30000); // 同幣種 30 秒冷卻
+                setTimeout(() => { aiCooldown[item.symbol] = false; }, 60000); // 診斷後 1 分鐘冷卻
+            } catch (e) {
+                console.log("AI 請求失敗，進入保護機制");
+                setTimeout(() => { aiCooldown[item.symbol] = false; }, 30000); 
+            }
         }
 
         initWSS();

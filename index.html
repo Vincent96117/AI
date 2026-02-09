@@ -3,1132 +3,1408 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TRIDENT V7 - Long-only Anomaly Scanner (Front-end Only)</title>
-  <link rel="icon" href="data:,">
+  <title>TRIDENT V7 — Long-only Anomaly Scanner + Gemini</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background:#050505; color:#d4d4d8; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .card { background:#0f0f11; border:1px solid #1f1f23; }
-    .pill { border:1px solid #2a2a31; background:#0b0b0d; }
-    .muted { color:#71717a; }
-    .mono { font-variant-numeric: tabular-nums; }
-    .ok { color:#22c55e; }
-    .bad { color:#ef4444; }
-    .warn { color:#f59e0b; }
-    .badge { border:1px solid #2a2a31; background:#0b0b0d; padding:2px 8px; border-radius:999px; font-size:11px; }
-    .locked { border:2px solid rgba(34,197,94,0.5) !important; box-shadow: 0 0 18px rgba(34,197,94,0.12); }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+    :root{ color-scheme: dark; }
+    body{ font-family:'JetBrains Mono',monospace; background:#050505; color:#d4d4d8; }
+    .card{ background:#0f0f11; border:1px solid #1f1f23; }
+    .muted{ color:#71717a; }
+    .badge{ border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.04); }
+    .badge-setup{ background:rgba(245,158,11,.12); border-color:rgba(245,158,11,.30); color:#fbbf24; }
+    .badge-ignite{ background:rgba(249,115,22,.12); border-color:rgba(249,115,22,.30); color:#fb923c; }
+    .badge-confirm{ background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.30); color:#34d399; }
+    .badge-leader{ background:rgba(59,130,246,.12); border-color:rgba(59,130,246,.30); color:#60a5fa; }
+    .mono{ font-family:'JetBrains Mono',monospace; }
+    .grid-3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:.5rem; }
+    .grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap:.5rem; }
+    .k{ color:#a1a1aa; font-size:11px; }
+    .v{ color:#e5e7eb; font-size:11px; }
+    .aiBox{ background:#0a0a0c; border:1px solid #1f1f23; }
+    .okDot{ width:8px;height:8px;border-radius:999px; display:inline-block; margin-right:.5rem; }
+    .dotOn{ background:#22c55e; box-shadow:0 0 10px #22c55e; }
+    .dotOff{ background:#52525b; }
+    .thinScroll::-webkit-scrollbar{ width:10px; }
+    .thinScroll::-webkit-scrollbar-thumb{ background:#202026; border-radius:999px; }
+    .thinScroll::-webkit-scrollbar-thumb:hover{ background:#2a2a33; }
+    .btn{ border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.05); }
+    .btn:hover{ background:rgba(255,255,255,.10); }
+    .btnPrimary{ background:rgba(37,99,235,.35); border-color:rgba(37,99,235,.55); }
+    .btnPrimary:hover{ background:rgba(37,99,235,.55); }
+    .btnGreen{ background:rgba(16,185,129,.25); border-color:rgba(16,185,129,.45); }
+    .btnGreen:hover{ background:rgba(16,185,129,.40); }
+    .btnRed{ background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.45); }
+    .btnRed:hover{ background:rgba(239,68,68,.30); }
+    .inp{ background:#0b0b0d; border:1px solid rgba(255,255,255,.12); color:#fff; }
+    .inp:focus{ outline:none; border-color:rgba(59,130,246,.7); box-shadow:0 0 0 3px rgba(59,130,246,.15); }
   </style>
 </head>
-<body class="p-4">
 
-  <!-- Top bar -->
-  <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-4">
-    <div class="flex items-center gap-3">
-      <span id="hb" class="inline-block w-2 h-2 rounded-full bg-zinc-600"></span>
-      <div>
-        <div class="text-white font-black italic text-xl leading-none">
-          TRIDENT <span class="text-emerald-400">V7</span> <span class="text-zinc-500 text-sm font-bold">LONG ONLY</span>
+<body class="p-4">
+  <!-- Top Bar -->
+  <div class="flex flex-col gap-3">
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span id="hb" class="okDot dotOff"></span>
+        <div>
+          <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-blue-400">V7</span></div>
+          <div class="muted text-[10px] font-bold tracking-widest uppercase">Long-only anomaly scanner → Top5 → Gemini (Top3)</div>
         </div>
-        <div class="text-[11px] muted">
-          異常優先掃描 → Top5 → Gemini（TopK）· 最強鎖定追蹤（除非更強才切換）
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <div class="flex items-center gap-2">
+          <input id="keyInput" type="password" class="inp text-[11px] px-2 py-1 rounded w-[280px]" placeholder="貼上 Gemini API Key（只存在你的瀏覽器 localStorage）" />
+          <button id="toggleKeyBtn" class="btn text-[11px] px-2 py-1 rounded">👁</button>
+          <button id="saveKeyBtn" class="btnGreen text-[11px] px-3 py-1 rounded font-bold">Save</button>
+          <button id="clearKeyBtn" class="btnRed text-[11px] px-3 py-1 rounded font-bold">Clear</button>
         </div>
-        <div id="status" class="text-[11px] muted mono mt-1">status: -</div>
+
+        <button id="testGeminiBtn" class="btnGreen text-[11px] px-3 py-1 rounded font-bold">Test Gemini</button>
+        <button id="analyzeTopBtn" class="btnPrimary text-[11px] px-3 py-1 rounded font-bold">Analyze Top (Gemini)</button>
+        <button id="resetBtn" class="btn text-[11px] px-3 py-1 rounded font-bold">RESET</button>
       </div>
     </div>
 
-    <div class="flex flex-col md:flex-row gap-2 md:items-end">
-      <div class="flex gap-2 items-center">
-        <input id="geminiKey" type="password" placeholder="貼上 Gemini API Key（只存本機 localStorage）"
-               class="w-80 max-w-full px-3 py-2 rounded text-[12px] bg-zinc-900 border border-zinc-700 text-white outline-none" />
-        <button id="saveKeyBtn" class="px-3 py-2 rounded text-[12px] font-bold bg-zinc-800 text-zinc-200 hover:bg-zinc-700">Save</button>
-        <button id="clearKeyBtn" class="px-3 py-2 rounded text-[12px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-700 hover:bg-zinc-800">Clear</button>
+    <div class="flex items-center justify-between text-[11px] muted">
+      <div class="flex items-center gap-3 flex-wrap">
+        <span id="keyStatus">Key：未載入</span>
+        <span id="geminiStatus">Gemini：-</span>
+        <span id="scanStatus">掃描：-</span>
+        <span id="quotaStatus">Backoff：-</span>
       </div>
-
-      <div class="flex gap-2 items-center">
-        <button id="testGeminiBtn" class="px-3 py-2 rounded text-[12px] font-bold bg-emerald-700 hover:bg-emerald-600 text-white">
-          Test Gemini
-        </button>
-        <button id="analyzeBtn" class="px-3 py-2 rounded text-[12px] font-black bg-blue-600 hover:bg-blue-500 text-white">
-          分析 Top（Gemini）
-        </button>
-        <button id="resetBtn" class="px-3 py-2 rounded text-[12px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-700 hover:bg-zinc-800">
-          RESET
-        </button>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input id="autoToggle" type="checkbox" class="accent-blue-500" checked />
+          <span>Auto（2 分鐘 / Top3 / 續力才打）</span>
+        </label>
+        <span id="clock">更新：-</span>
       </div>
     </div>
   </div>
 
   <!-- Main -->
-  <div class="card rounded-lg p-4">
-    <div class="flex items-center justify-between mb-3">
-      <div class="text-white font-black">Top 5 候選（最強鎖定置頂）</div>
-      <div class="text-[11px] muted mono">
-        更新：<span id="lastUpdate">-</span> · 模型：<span id="modelName">-</span> · max_out=<span id="maxOut">-</span> · TopK=<span id="topkUI">-</span> · Auto=<span id="autoOn">-</span>
+  <div class="mt-4 grid grid-cols-1 gap-4">
+    <div class="card rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-white font-black">Top 5 候選（最強鎖定置頂）</div>
+        <div class="muted text-[11px]" id="weightsHint"></div>
       </div>
+      <div id="top5" class="flex flex-col gap-3"></div>
     </div>
-
-    <div id="top5" class="flex flex-col gap-3"></div>
   </div>
 
 <script>
-/* ===================== CONFIG ===================== */
+/** =========================
+ *  0) 安全提醒（不要把 key commit）
+ * ========================= */
+(function(){
+  // 不做 alert 擾人，改用狀態列提示即可
+})();
+
+/** =========================
+ *  1) 設定區
+ * ========================= */
 const CFG = {
-  EXCLUDE: new Set(['BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT','BNBUSDT','BNXUSDT']),
+  // Binance
+  WS_MINI: "wss://fstream.binance.com/ws/!miniTicker@arr",
+  WS_MARK: "wss://fstream.binance.com/ws/!markPrice@arr@1s",
+  WS_BASE: "wss://fstream.binance.com/stream?streams=",
+  HTTP: "https://fapi.binance.com",
 
-  // windows
-  WIN_5M_POINTS: 100,      // 5m w/ 3s tick (approx)
-  HIST_4H_POINTS: 240,     // 4h w/ 1-min samples
-
-  // anomaly-first gates
-  VOL_Z_TH: 1.8,
-  FUND_Z_TH: 1.2,
-  CANDIDATE_MAX: 40,
-
-  // anti-chase
-  MAX_RET_5M_PCT: 0.9,
-  MAX_ABS_PREMIUM_PCT: 0.25,
-  MAX_RANGE_Z: 2.5,
-
-  // robust warmup (minutes)
-  ROBUST_MIN_HIST: 6,
-
-  // OI throttling
-  OI_CHECK_MAX: 12,
-  OI_REFRESH_MS: 60_000,
-
-  // LONG-only filters (你可調)
-  LONG_FLOW_IMB_MIN: 0.03,       // 主動買入比例至少 > 0.03
-  LONG_REQUIRE_FLOW: false,      // true=一定要有imb/delta才進；false=沒flow資料時允許代理條件
-  LONG_REQUIRE_OI_POS: false,  //  長期可開：OI 5m 必須 >=0 才做多（會更嚴格）
-  LONG_REQUIRE_PREM_SLOPE_POS: true, // 資費/溢價斜率偏多更乾淨
-
-  // scoring weights
-  W_VOLZ: 1.5,
-  W_FUNDZ_POS: 0.9,        // fundZ 正向獎勵（做多）
-  W_FUNDZ_NEG_PEN: 0.7,    // fundZ 負向扣分
-  W_VOL5MZ: 0.7,
-  W_IMB5M: 1.0,
-  W_DELTAQ: 0.8,           // 主動買入差額（金額）權重（用 zscore）
-  W_OI5MZ_POS: 0.6,
-  W_OI5MZ_NEG_PEN: 0.5,
-  W_ALIGN: 0.6,
-
-  // strongest lock behavior
-  LOCK_SWITCH_RATIO: 1.06,  // 新的第一名分數 > locked*1.06 才切
-  LOCK_SWITCH_ABS: 1.0,     // 或者 > locked + 1.0 才切
-  LOCK_MIN_HOLD_MS: 90_000, // 最強至少持有 90s 才允許切（避免跳來跳去）
+  // Universe / Refresh
+  UNIVERSE_N: 90,               // 候選池（非 top25 的高流動合約）
+  TOP_N: 5,
+  ANALYZE_TOPK: 3,
+  AUTO_EVERY_MS: 120000,        // 2 分鐘
+  RENDER_EVERY_MS: 1000,
+  OI_REFRESH_MS: 120000,        // OI 歷史 2 分鐘抓一次（只抓 Top 候選）
+  MAX_STREAMS_PER_WS: 60,       // aggTrade 合併 streams 數（避免 URL 太長）
+  MIN_TRADES_FOR_READY: 80,     // 熱機判定（5m 內至少多少成交筆）
+  WARMUP_MIN: 12,               // 顯示用：至少累積幾分鐘 candle 才算「比較可用」
 
   // Gemini
-  GEMINI: {
-    MODEL: "gemini-2.5-flash",
-    TOPK: 3,
-    MAX_OUTPUT_TOKENS: 420,
-    TEMP: 0.2,
-    AUTO_INTERVAL_MS: 120000,     // 最多兩分鐘跑一次
-    AUTO_CHECK_MS: 30000,
-    SYMBOL_COOLDOWN_MS: 300000    // 同幣 5 分鐘內不重複問
-  }
+  GEMINI_MODEL: "gemini-2.5-flash",
+  GEMINI_MAX_OUT: 420,
+  GEMINI_TEMP: 0.25,
+  GEMINI_TOPK: 32,
+
+  // 鎖榜
+  LEADER_SWAP_DELTA: 6,         // 新王要比舊王至少多 6 分才換（避免跳榜）
+  LEADER_MIN_HOLD_MS: 45000,    // 至少持有 45 秒
+  TOPLIST_HYSTERESIS_MS: 25000, // Top5 列表鎖定時間
+
+  // 只做多：反追高（anti-chase）
+  MAX_RET5M_PCT: 1.10,          // 5 分鐘漲幅太大就不追
+  MAX_DIST_MA20_ATR: 1.6,       // 距離 MA20 超過 1.6 ATR 視為太追
+  MIN_BUY_RATIO: 0.55,          // 5m 主動買佔比至少 55%
 };
 
-document.getElementById('modelName').innerText = CFG.GEMINI.MODEL;
-document.getElementById('maxOut').innerText = CFG.GEMINI.MAX_OUTPUT_TOKENS;
-document.getElementById('topkUI').innerText = CFG.GEMINI.TOPK;
+// 市值前 25（大概名單，夠用；你可自行調整）
+// 目的：不掃描「市場前段班」，專抓異常小中型。
+const EXCLUDE_MCAP25 = new Set([
+  "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","TONUSDT",
+  "AVAXUSDT","DOTUSDT","MATICUSDT","LINKUSDT","BCHUSDT","LTCUSDT","ATOMUSDT","ETCUSDT","XLMUSDT",
+  "ICPUSDT","APTUSDT","FILUSDT","HBARUSDT","NEARUSDT","ARBUSDT","OPUSDT"
+]);
 
-/* ===================== UTILS ===================== */
-class Ring {
-  constructor(n){ this.n=n; this.a=[]; this.i=0; }
-  push(x){
-    if (this.a.length < this.n) this.a.push(x);
-    else { this.a[this.i] = x; this.i = (this.i+1) % this.n; }
-  }
-  values(){
-    if (this.a.length < this.n || this.i===0) return this.a.slice();
-    return this.a.slice(this.i).concat(this.a.slice(0,this.i));
-  }
-  get size(){ return this.a.length; }
-  last(){
-    if (this.a.length===0) return null;
-    if (this.a.length < this.n) return this.a[this.a.length-1];
-    const idx = (this.i - 1 + this.n) % this.n;
-    return this.a[idx];
-  }
-}
-function median(arr){
-  if (!arr.length) return 0;
-  const a = arr.slice().sort((x,y)=>x-y);
-  const m = Math.floor(a.length/2);
-  return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
-}
-function mad(arr, med){
-  if (!arr.length) return 0;
-  const dev = arr.map(x=>Math.abs(x - med));
-  return median(dev);
-}
-function robustZ(x, hist){
-  if (!hist || hist.length < CFG.ROBUST_MIN_HIST) return null;
-  const med = median(hist);
-  const m = mad(hist, med) || 1e-12;
-  return (x - med) / (1.4826*m);
-}
-function linSlope(y){
-  const n = y.length;
-  if (n < 6) return 0;
-  let sx=0, sy=0, sxx=0, sxy=0;
-  for (let i=0;i<n;i++){ sx+=i; sy+=y[i]; sxx+=i*i; sxy+=i*y[i]; }
-  const den = n*sxx - sx*sx;
-  if (Math.abs(den) < 1e-12) return 0;
-  return (n*sxy - sx*sy) / den;
-}
-function fmt(x, d=3){
-  if (x===null || x===undefined || Number.isNaN(x)) return '-';
-  const v = Number(x);
-  if (!Number.isFinite(v)) return '-';
-  return v.toFixed(d);
-}
-function pct(x, d=2){ return fmt(x, d) + '%'; }
-function sign(x, eps=1e-6){ return x>eps?1:(x<-eps?-1:0); }
-function escapeHtml(s){
-  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
-}
-function hashStr(s){
-  let h=2166136261;
-  for (let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return (h>>>0).toString(16);
-}
-function nowMs(){ return Date.now(); }
+// 權重（會顯示在 UI 右上角）
+const WEIGHTS = {
+  squeeze: 0.22,   // 收斂蓄勢
+  delta:  0.26,    // 主動買入差額（5m）
+  oi:     0.22,    // OI 異常（5m / 4h）
+  vol:    0.18,    // 成交量異常（5m）
+  prem:   0.12,    // 溢價 / funding 斜率
+};
+document.getElementById("weightsHint").innerText =
+  `權重：收斂${Math.round(WEIGHTS.squeeze*100)}%｜主動買差${Math.round(WEIGHTS.delta*100)}%｜OI${Math.round(WEIGHTS.oi*100)}%｜量${Math.round(WEIGHTS.vol*100)}%｜溢價${Math.round(WEIGHTS.prem*100)}%`;
 
-/* ===================== CHINESE MAPPERS ===================== */
-function patternCN(p){
-  const m = {
-    "breakout-pending": "突破前兆（待表態）",
-    "continuation-pullback": "中繼回踩（續走）",
-    "reversal": "反轉型態",
-    "squeeze": "擠壓收斂（待放量）",
-    "chop": "盤整雜訊"
+/** =========================
+ *  2) 小工具
+ * ========================= */
+const $ = (id)=>document.getElementById(id);
+const now = ()=>Date.now();
+
+function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
+function pct(x){ return (x*100); }
+function fmtN(x, d=2){
+  if (x===null || x===undefined || Number.isNaN(x)) return "-";
+  const n = Number(x);
+  if (!Number.isFinite(n)) return "-";
+  return n.toFixed(d);
+}
+function fmtInt(x){
+  if (x===null || x===undefined || Number.isNaN(x)) return "-";
+  const n = Number(x);
+  if (!Number.isFinite(n)) return "-";
+  return Math.round(n).toLocaleString();
+}
+function fmtMoney(x){
+  if (x===null || x===undefined || Number.isNaN(x)) return "-";
+  const n = Number(x);
+  if (!Number.isFinite(n)) return "-";
+  // 不要太長
+  if (Math.abs(n) >= 1e9) return (n/1e9).toFixed(2)+"B";
+  if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(2)+"M";
+  if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(2)+"K";
+  return n.toFixed(0);
+}
+function mean(arr){
+  if (!arr || arr.length===0) return 0;
+  let s=0; for(const v of arr) s+=v;
+  return s/arr.length;
+}
+function std(arr){
+  if (!arr || arr.length<2) return 0;
+  const m=mean(arr);
+  let s=0; for(const v of arr) s+=(v-m)*(v-m);
+  return Math.sqrt(s/(arr.length-1));
+}
+function zScore(x, arr){
+  if (!arr || arr.length<10) return 0;
+  const m=mean(arr);
+  const sd=std(arr);
+  if (sd===0) return 0;
+  return (x-m)/sd;
+}
+function safeJsonParseText(text){
+  // 找第一個 { 到最後一個 }，避免模型前後多字
+  if (typeof text !== "string") return null;
+  let t = text.trim();
+  // 去 code fence
+  if (t.startsWith("```")) {
+    t = t.replace(/^```[a-zA-Z]*\n?/,"").replace(/```$/,"").trim();
+  }
+  const a = t.indexOf("{");
+  const b = t.lastIndexOf("}");
+  if (a>=0 && b>a) {
+    const core = t.slice(a, b+1);
+    try { return JSON.parse(core); } catch(e) { return null; }
+  }
+  try { return JSON.parse(t); } catch(e) { return null; }
+}
+
+/** =========================
+ *  3) 狀態
+ * ========================= */
+const S = {
+  universe: [],              // 候選池 symbols
+  sym: new Map(),            // symbol -> state
+  wsMini: null,
+  wsMark: null,
+  wsAgg: [],                 // 多條合併 ws
+  lastHB: 0,
+  leader: { symbol: null, score: 0, since: 0 },
+  top5: [],
+  top5LockedUntil: 0,
+  geminiKey: "",
+  geminiBackoffUntil: 0,
+  aiCache: new Map(),        // symbol -> {ts, data, raw}
+  aiCooldownMs: 20*60*1000,  // 同幣 20 分鐘內不重複自動打
+  autoTimer: null,
+  oiTimer: null,
+  renderTimer: null,
+  minuteTimer: null,
+  lastMinute: null,
+  lastTopAnalyze: 0,
+};
+
+/** =========================
+ *  4) 每幣資料結構
+ * ========================= */
+function makeSymState(symbol){
+  return {
+    symbol,
+    price: null,
+    markPrice: null,
+    indexPrice: null,
+    premiumPct: null,
+    fundingPct: null,
+
+    // aggTrade 5m 滑窗（秒桶）
+    secBuckets: new Map(), // sec -> {buy,sell,total,count}
+    sumBuy: 0,
+    sumSell: 0,
+    sumTotal: 0,
+    sumCount: 0,
+
+    // 1m candles（用 trades 合成）
+    curMin: null,
+    curCandle: null, // {t,o,h,l,c,v,buy,sell}
+    candles: [],      // 最新在尾巴，最多 240
+    closes: [],       // 只存 close，最多 240
+
+    // 5m 指標歷史（每分鐘取一次當作「5m窗」）
+    hist_delta5m: [],
+    hist_vol5m: [],
+    hist_buyRatio5m: [],
+    hist_premium: [],
+
+    // OI（HTTP）5m 序列（最多 100 點）
+    oiSeries: null,     // array of {ts, oi}
+    oi5m: null,
+    oi4h: null,
+    oiPrev4h: null,
+    oiZ: 0,
+
+    // 計算輸出
+    ready: false,
+    warmupMin: 0,
+    ret5mPct: 0,
+    ma20: null,
+    atr20: null,
+    squeezeZ: 0,
+    deltaZ: 0,
+    volZ: 0,
+    buyRatio: 0,
+    premSlopeZ: 0,
+    stage: "WARMUP",  // SETUP / IGNITE / CONFIRM / WARMUP
+    score: 0,
+    tags: [],
+    persist: { stageSince: 0, lastStage: "WARMUP" },
   };
-  return m[p] || (p || "-");
-}
-function biasCN(b){
-  const m = { "LONG":"偏多", "SHORT":"偏空", "NEUTRAL":"觀望" };
-  return m[b] || (b || "-");
-}
-function typeCN(t){
-  const m = { "stop":"突破單", "limit":"限價單", "market":"市價" };
-  return m[t] || (t || "-");
 }
 
-/* ===================== STATE ===================== */
-const S = new Map();        // symbol -> state
-let wsMark = null;
-let wsKline = null;
-
-let symbolsAll = [];
-let candidates = [];        // symbols
-let topList = [];           // [{sym,score}]
-let displayList = [];       // [{sym,score}] locked-first
-
-let lastHeartbeat = 0;
-let lastCandidateHash = "";
-let lastTopAt = 0;
-
-// strongest lock
-let lockedSym = null;
-let lockedAt = 0;
-
-// Gemini store per symbol (for right side display)
-const aiBySym = new Map();
-const lastGeminiSymAt = new Map();
-let lastAutoGeminiAt = 0;
-let lastTopHashGemini = "";
-
-function stOf(sym){
-  if (S.has(sym)) return S.get(sym);
-  const st = {
-    sym,
-
-    // markPrice stream fields
-    lastP: null,
-    lastI: null,
-    lastR: null,
-    retRing: new Ring(CFG.WIN_5M_POINTS),   // log returns
-    premRing: new Ring(CFG.WIN_5M_POINTS),  // premium fraction
-
-    // minute sampled hist (4h)
-    rvHist: new Ring(CFG.HIST_4H_POINTS),
-    premSlopeHist: new Ring(CFG.HIST_4H_POINTS),
-    lastSampleAt: 0,
-
-    // derived
-    rv5m: null,
-    ret5mPct: null,
-    premNow: null,          // %
-    premSlope: null,        // scaled
-    volZ: null,
-    fundZ: null,
-
-    // candidate kline 5m
-    k5Bars: [],
-    vol5Hist: new Ring(48),
-    imb5Hist: new Ring(48),
-    rangeHist: new Ring(48),
-    deltaQHist: new Ring(48),
-
-    // last values
-    vol5mZ: null,
-    imb5m: null,
-    imb4h: null,
-    rangeZ: null,
-
-    delta5mQuote: null,
-    delta4hQuote: null,
-    deltaQZ: null,
-
-    // OI
-    oi: { ts: 0, dOi5m: null, oi5mZ: null, dOi4h: null },
-
-    // structure/patterns
-    patternTags: [],
-    levels: { swingHigh: null, swingLow: null, mid: null },
-    dist: { toHighPct: null, toLowPct: null, medianRangePct: null },
-
-    // scoring
-    dirHint: 0,
-    score: null
-  };
-  S.set(sym, st);
-  return st;
+/** =========================
+ *  5) Binance：初始化 universe
+ * ========================= */
+async function fetchJson(url){
+  const r = await fetch(url);
+  const t = await r.text();
+  let j=null;
+  try{ j = JSON.parse(t); }catch(e){}
+  return { ok:r.ok, status:r.status, json:j, raw:t };
 }
 
-/* ===================== BINANCE UNIVERSE ===================== */
-async function loadUniverse(){
-  const ex = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo').then(r=>r.json());
-  symbolsAll = (ex.symbols || [])
-    .filter(x => x.status === 'TRADING' && x.contractType === 'PERPETUAL' && x.quoteAsset === 'USDT')
-    .map(x => x.symbol)
-    .filter(s => !CFG.EXCLUDE.has(s));
+async function initUniverse(){
+  $("scanStatus").innerText = "掃描：初始化中…";
+  // 先拿 24h ticker（用 quoteVolume 排流動性）
+  const {ok, json} = await fetchJson(`${CFG.HTTP}/fapi/v1/ticker/24hr`);
+  if(!ok || !Array.isArray(json)){
+    $("scanStatus").innerText = "掃描：24hr 讀取失敗";
+    return;
+  }
+  const list = json
+    .filter(x => x.symbol && x.symbol.endsWith("USDT"))
+    .filter(x => !EXCLUDE_MCAP25.has(x.symbol))
+    .sort((a,b)=> Number(b.quoteVolume||0)-Number(a.quoteVolume||0))
+    .slice(0, CFG.UNIVERSE_N)
+    .map(x=>x.symbol);
+
+  S.universe = list;
+
+  for(const sym of list){
+    if(!S.sym.has(sym)) S.sym.set(sym, makeSymState(sym));
+  }
+  $("scanStatus").innerText = `掃描：Universe=${S.universe.length}（已排除市值前 25）`;
 }
 
-/* ===================== MARKPRICE WS (3s) ===================== */
-function connectMark(){
-  if (wsMark) try{ wsMark.close(); }catch(_){}
-  wsMark = new WebSocket('wss://fstream.binance.com/ws/!markPrice@arr');
+/** =========================
+ *  6) Binance：WS（miniTicker/markPrice/aggTrade）
+ * ========================= */
+function setHB(on){
+  const el = $("hb");
+  el.className = `okDot ${on ? "dotOn":"dotOff"}`;
+}
+function startWS(){
+  stopWS();
 
-  wsMark.onopen = () => { lastHeartbeat = nowMs(); };
-
-  wsMark.onmessage = (ev) => {
-    lastHeartbeat = nowMs();
-    const arr = JSON.parse(ev.data);
-
-    for (const u of arr){
-      const sym = u.s;
-      if (!sym || CFG.EXCLUDE.has(sym)) continue;
-
-      const st = stOf(sym);
-      const p = Number(u.p);
-      const i = Number(u.i);
-      const r = Number(u.r);
-
-      if (Number.isFinite(p) && st.lastP){
-        st.retRing.push(Math.log(p / st.lastP));
-      }
-      st.lastP = Number.isFinite(p) ? p : st.lastP;
-      st.lastI = Number.isFinite(i) ? i : st.lastI;
-      st.lastR = Number.isFinite(r) ? r : st.lastR;
-
-      if (st.lastP && st.lastI){
-        st.premRing.push((st.lastP - st.lastI) / st.lastI);
-      }
+  // miniTicker: 更新 price（全市場）
+  S.wsMini = new WebSocket(CFG.WS_MINI);
+  S.wsMini.onmessage = (e)=>{
+    S.lastHB = now();
+    setHB(true);
+    let arr;
+    try{ arr = JSON.parse(e.data); }catch(err){ return; }
+    if(!Array.isArray(arr)) return;
+    for(const it of arr){
+      const sym = it.s;
+      if(!S.sym.has(sym)) continue;
+      const st = S.sym.get(sym);
+      st.price = Number(it.c);
     }
   };
-
-  wsMark.onclose = () => setTimeout(connectMark, 2000);
-  wsMark.onerror = () => { try{ wsMark.close(); }catch(_){} };
-}
-
-/* ===================== METRICS SAMPLING ===================== */
-function sampleMetrics(){
-  const now = nowMs();
-  for (const st of S.values()){
-    if (st.retRing.size < 20 || st.premRing.size < 20) continue;
-
-    const rets = st.retRing.values();
-    let sum = 0, sumsq = 0;
-    for (const x of rets){ sum += x; sumsq += x*x; }
-
-    st.ret5mPct = (Math.exp(sum) - 1) * 100;
-    st.rv5m = Math.sqrt(sumsq) * 100;
-
-    const prem = st.premRing.last(); // fraction
-    st.premNow = prem * 100;         // %
-    st.premSlope = linSlope(st.premRing.values()) * 1e4;
-
-    if (!st.lastSampleAt || (now - st.lastSampleAt >= 60_000)){
-      st.rvHist.push(st.rv5m);
-      st.premSlopeHist.push(st.premSlope);
-      st.lastSampleAt = now;
-    }
-
-    st.volZ = robustZ(st.rv5m, st.rvHist.values());
-    st.fundZ = robustZ(st.premSlope, st.premSlopeHist.values());
-  }
-}
-
-/* ===================== CANDIDATES (anomaly-first) ===================== */
-function computeCandidates(){
-  const arr = [];
-  for (const st of S.values()){
-    if (st.volZ === null) continue;
-
-    const volPass  = Math.abs(st.volZ) >= CFG.VOL_Z_TH;
-    const retPass  = (st.ret5mPct !== null) && (Math.abs(st.ret5mPct) <= CFG.MAX_RET_5M_PCT);
-    const premPass = (st.premNow !== null) && (Math.abs(st.premNow) <= CFG.MAX_ABS_PREMIUM_PCT);
-
-    if (!volPass || !retPass || !premPass) continue;
-
-    const fundPass = (st.fundZ !== null) ? (Math.abs(st.fundZ) >= CFG.FUND_Z_TH) : false;
-    const preScore = Math.abs(st.volZ) + 0.6*Math.abs(st.fundZ || 0) + (fundPass ? 0.4 : 0);
-
-    arr.push({ sym: st.sym, preScore });
-  }
-
-  arr.sort((a,b)=>b.preScore - a.preScore);
-  candidates = arr.slice(0, CFG.CANDIDATE_MAX).map(x=>x.sym);
-}
-
-/* ===================== KLINE 5m for candidates ===================== */
-function connectKlineForCandidates(){
-  const hash = candidates.join('|');
-  if (hash === lastCandidateHash) return;
-  lastCandidateHash = hash;
-
-  if (wsKline) try{ wsKline.close(); }catch(_){}
-  if (!candidates.length) return;
-
-  const streams = candidates.map(s => `${s.toLowerCase()}@kline_5m`);
-  const url = `wss://fstream.binance.com/stream?streams=${streams.join('/')}`;
-  wsKline = new WebSocket(url);
-
-  wsKline.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
-    const data = msg.data;
-    if (!data || data.e !== 'kline') return;
-
-    const sym = data.s;
-    const k = data.k;
-    if (!k || !k.x) return; // only closed 5m candle
-
-    const st = stOf(sym);
-    const o = Number(k.o), h = Number(k.h), l = Number(k.l), c = Number(k.c);
-    const v = Number(k.v);     // total base volume
-    const V = Number(k.V);     // taker buy base volume
-    const range = (c > 0) ? ((h - l) / c) : 0;
-
-    // 主動買入比例（-1~+1）
-    const imb = (v > 0) ? ((2*V - v) / v) : 0;
-
-    // ✅ 主動買入差額（用 quote 金額近似）
-    const deltaBase = (2*V - v);
-    const deltaQuote = deltaBase * c;
-
-    st.vol5Hist.push(v);
-    st.imb5Hist.push(imb);
-    st.rangeHist.push(range);
-    st.deltaQHist.push(deltaQuote);
-
-    st.k5Bars.push({ t:k.T, o,h,l,c,v,V, imb, range, deltaQuote });
-    if (st.k5Bars.length > 80) st.k5Bars.shift();
-
-    st.imb5m = imb;
-    st.delta5mQuote = deltaQuote;
-
-    // 4h values (48 bars)
-    const vols = st.vol5Hist.values();
-    const imbs = st.imb5Hist.values();
-    let wSum=0, vSum=0;
-    for (let i=0;i<Math.min(vols.length, imbs.length); i++){
-      wSum += imbs[i] * vols[i];
-      vSum += vols[i];
-    }
-    st.imb4h = vSum > 0 ? (wSum / vSum) : 0;
-
-    const dq = st.deltaQHist.values();
-    st.delta4hQuote = dq.reduce((a,b)=>a+b, 0);
-
-    st.vol5mZ = robustZ(v, st.vol5Hist.values());
-    st.rangeZ = robustZ(range, st.rangeHist.values());
-    st.deltaQZ = robustZ(deltaQuote, st.deltaQHist.values());
-
-    computeLocalPattern(st);
-    computeDistanceFeatures(st);
-  };
-
-  wsKline.onclose = () => setTimeout(connectKlineForCandidates, 1500);
-  wsKline.onerror = () => { try{ wsKline.close(); }catch(_){} };
-}
-
-/* ===================== PATTERN / STRUCTURE ===================== */
-function computeLocalPattern(st){
-  const bars = st.k5Bars;
-  if (bars.length < 3) { st.patternTags = []; return; }
-
-  const last = bars[bars.length-1];
-  const prev = bars[bars.length-2];
-  const prev2 = bars[bars.length-3];
-  const tags = [];
-
-  const body = Math.abs(last.c - last.o);
-  const rng = Math.max(1e-12, last.h - last.l);
-  const bodyPct = body / rng;
-
-  const upperWick = last.h - Math.max(last.o, last.c);
-  const lowerWick = Math.min(last.o, last.c) - last.l;
-
-  if (bodyPct < 0.2) tags.push("十字/猶豫");
-  if (lowerWick > 2*body && upperWick < body) tags.push("錘子線傾向");
-  if (upperWick > 2*body && lowerWick < body) tags.push("流星線傾向");
-
-  if (last.h < prev.h && last.l > prev.l) tags.push("內包線");
-
-  const lastBull = last.c > last.o;
-  const prevBull = prev.c > prev.o;
-  const lastBodyHi = Math.max(last.o, last.c);
-  const lastBodyLo = Math.min(last.o, last.c);
-  const prevBodyHi = Math.max(prev.o, prev.c);
-  const prevBodyLo = Math.min(prev.o, prev.c);
-
-  if (lastBull && !prevBull && lastBodyHi >= prevBodyHi && lastBodyLo <= prevBodyLo) tags.push("多方吞噬");
-  if (!lastBull && prevBull && lastBodyHi >= prevBodyHi && lastBodyLo <= prevBodyLo) tags.push("空方吞噬");
-
-  const rArr = st.rangeHist.values();
-  if (rArr.length >= 20){
-    const medR = median(rArr);
-    if (last.range < 0.75*medR) tags.push("波幅收斂");
-    if (last.range > 1.6*medR) tags.push("波幅擴張");
-  }
-
-  const vArr = st.vol5Hist.values();
-  if (vArr.length >= 20){
-    const medV = median(vArr);
-    if (last.v > 1.8*medV) tags.push("量能放大");
-    if (last.v < 0.6*medV) tags.push("量能萎縮");
-  }
-
-  if (Math.sign(prev2.imb) === Math.sign(prev.imb) && Math.sign(prev.imb) === Math.sign(last.imb) && Math.abs(last.imb) > 0.08){
-    tags.push("主動買連續偏多");
-  }
-
-  // structure levels (last 20 bars)
-  const seg = bars.slice(-20);
-  const swingHigh = Math.max(...seg.map(b=>b.h));
-  const swingLow  = Math.min(...seg.map(b=>b.l));
-  st.levels.swingHigh = swingHigh;
-  st.levels.swingLow = swingLow;
-  st.levels.mid = (swingHigh + swingLow)/2;
-
-  st.patternTags = tags;
-}
-
-function computeDistanceFeatures(st){
-  if (!st.lastP || !st.levels.swingHigh || !st.levels.swingLow) return;
-
-  const p = st.lastP;
-  st.dist.toHighPct = (st.levels.swingHigh - p) / p * 100;
-  st.dist.toLowPct  = (p - st.levels.swingLow) / p * 100;
-
-  const r = st.rangeHist.values();
-  if (r.length >= 10){
-    st.dist.medianRangePct = median(r) * 100;
-  }
-}
-
-/* ===================== OI (throttled) ===================== */
-async function fetchOI(sym){
-  const st = stOf(sym);
-  const now = nowMs();
-  if (now - st.oi.ts < CFG.OI_REFRESH_MS) return;
-
-  const url5 = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=5m&limit=50`;
-  const url4 = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${sym}&period=4h&limit=2`;
-
-  const [d5, d4] = await Promise.all([
-    fetch(url5).then(r=>r.json()).catch(()=>null),
-    fetch(url4).then(r=>r.json()).catch(()=>null),
-  ]);
-
-  function sortByTs(a){ return (a||[]).slice().sort((x,y)=>(x.timestamp||0)-(y.timestamp||0)); }
-
-  const a5 = sortByTs(d5);
-  if (a5.length >= 10){
-    const series = a5.map(x => Number(x.sumOpenInterestValue ?? x.sumOpenInterest));
-    const diffs = [];
-    for (let i=1;i<series.length;i++) diffs.push(series[i] - series[i-1]);
-    const lastDiff = diffs[diffs.length-1];
-    const hist = diffs.slice(0, -1);
-
-    st.oi.dOi5m = lastDiff;
-    st.oi.oi5mZ = robustZ(lastDiff, hist);
-  }
-
-  const a4 = sortByTs(d4);
-  if (a4.length === 2){
-    const s0 = Number(a4[0].sumOpenInterestValue ?? a4[0].sumOpenInterest);
-    const s1 = Number(a4[1].sumOpenInterestValue ?? a4[1].sumOpenInterest);
-    st.oi.dOi4h = (s1 - s0);
-  }
-
-  st.oi.ts = now;
-}
-
-async function refreshOIForStrongOnes(){
-  const scored = candidates.map(sym=>{
-    const st = stOf(sym);
-    const s = Math.abs(st.volZ||0) + 0.7*Math.max(0,(st.fundZ||0)) + 0.6*Math.max(0,(st.deltaQZ||0)) + 0.7*Math.max(0,(st.imb5m||0));
-    return {sym, s};
-  }).sort((a,b)=>b.s-a.s).slice(0, CFG.OI_CHECK_MAX);
-
-  for (const x of scored){
-    await fetchOI(x.sym);
-  }
-}
-
-/* ===================== TOP5 SCORE + STRONGEST LOCK ===================== */
-function passLongOnly(st){
-  const hasFlow = (st.imb5m !== null && st.delta5mQuote !== null);
-
-  const flowLong =
-    hasFlow &&
-    (st.imb5m > CFG.LONG_FLOW_IMB_MIN) &&
-    (st.delta5mQuote > 0);
-
-  const proxyLong =
-    (!hasFlow) &&
-    (!CFG.LONG_REQUIRE_FLOW) &&
-    (CFG.LONG_REQUIRE_PREM_SLOPE_POS ? ((st.premSlope || 0) > 0) : true) &&
-    ((st.fundZ === null) ? true : (st.fundZ >= 0)); // proxy: funding slope not bearish
-
-  if (CFG.LONG_REQUIRE_FLOW) return flowLong;
-  return flowLong || proxyLong;
-}
-
-function computeTopAndLock(){
-  const arr = [];
-
-  for (const sym of candidates){
-    const st = stOf(sym);
-    if (st.volZ === null) continue;
-
-    // basic "not too late"
-    const rangeOk = (st.rangeZ === null) ? true : (Math.abs(st.rangeZ) <= CFG.MAX_RANGE_Z);
-    if (!rangeOk) continue;
-
-    // Long-only filter
-    if (!passLongOnly(st)) continue;
-
-    // direction hint
-    st.dirHint = 1; // Long-only view
-
-    // scoring
-    let score = 0;
-
-    // anomaly (vol always good as "attention")
-    score += CFG.W_VOLZ * Math.abs(st.volZ || 0);
-
-    // funding slope directional
-    const fz = (st.fundZ || 0);
-    if (fz >= 0) score += CFG.W_FUNDZ_POS * fz;
-    else score -= CFG.W_FUNDZ_NEG_PEN * Math.abs(fz);
-
-    // volume anomaly
-    score += CFG.W_VOL5MZ * Math.max(0, (st.vol5mZ || 0));
-
-    // flow (imbalance)
-    score += CFG.W_IMB5M * Math.max(0, (st.imb5m || 0));
-
-    // taker delta quote zscore
-    score += CFG.W_DELTAQ * Math.max(0, (st.deltaQZ || 0));
-
-    // OI directional
-    const oz = (st.oi.oi5mZ || 0);
-    if (oz >= 0) score += CFG.W_OI5MZ_POS * oz;
-    else score -= CFG.W_OI5MZ_NEG_PEN * Math.abs(oz);
-
-    // optional stricter long confirmations
-    if (CFG.LONG_REQUIRE_PREM_SLOPE_POS && (st.premSlope || 0) <= 0) score -= 0.8;
-    if (CFG.LONG_REQUIRE_OI_POS && (st.oi.dOi5m || 0) < 0) score -= 0.8;
-
-    // anti-chase penalty
-    if (st.ret5mPct !== null && Math.abs(st.ret5mPct) > CFG.MAX_RET_5M_PCT) score -= 1.2;
-
-    // "flow missing" penalty (still allow proxy but lower)
-    const hasFlow = (st.imb5m !== null && st.delta5mQuote !== null);
-    if (!hasFlow) score -= 0.8;
-
-    // align bonus: flowLong + positive prem slope
-    const align = (hasFlow && st.imb5m > 0 && (st.premSlope || 0) > 0) ? 1 : 0;
-    score += CFG.W_ALIGN * align;
-
-    st.score = score;
-    arr.push({ sym, score });
-  }
-
-  arr.sort((a,b)=>b.score - a.score);
-  topList = arr.slice(0, 25); // for lock check / debug
-
-  // update lock
-  const top1 = arr[0] || null;
-  const now = nowMs();
-
-  if (!lockedSym && top1){
-    lockedSym = top1.sym;
-    lockedAt = now;
-  } else if (lockedSym){
-    const lockedRow = arr.find(x=>x.sym === lockedSym);
-    if (!lockedRow && top1){
-      lockedSym = top1.sym;
-      lockedAt = now;
-    } else if (lockedRow && top1 && top1.sym !== lockedSym){
-      const holdOk = (now - lockedAt) >= CFG.LOCK_MIN_HOLD_MS;
-      const ratioOk = top1.score > lockedRow.score * CFG.LOCK_SWITCH_RATIO;
-      const absOk   = top1.score > lockedRow.score + CFG.LOCK_SWITCH_ABS;
-
-      if (holdOk && (ratioOk || absOk)){
-        lockedSym = top1.sym;
-        lockedAt = now;
-      }
-    }
-  }
-
-  // build display list: locked first, then next best until 5
-  const out = [];
-  if (lockedSym){
-    const r = arr.find(x=>x.sym === lockedSym);
-    if (r) out.push(r);
-  }
-  for (const r of arr){
-    if (out.length >= 5) break;
-    if (out.find(x=>x.sym === r.sym)) continue;
-    out.push(r);
-  }
-  displayList = out;
-
-  lastTopAt = now;
-  document.getElementById('lastUpdate').innerText = new Date(lastTopAt).toLocaleTimeString();
-}
-
-/* ===================== GEMINI ===================== */
-function getGeminiKey(){
-  const k = document.getElementById('geminiKey').value.trim();
-  return k || (localStorage.getItem('GEMINI_API_KEY') || "");
-}
-function saveGeminiKey(){
-  const k = document.getElementById('geminiKey').value.trim();
-  if (!k) return alert("Key 空的");
-  localStorage.setItem('GEMINI_API_KEY', k);
-  alert("已存到 localStorage（只在這台瀏覽器）");
-}
-function clearGeminiKey(){
-  localStorage.removeItem('GEMINI_API_KEY');
-  document.getElementById('geminiKey').value = "";
-  alert("已清除");
-}
-
-function safeParseJson(maybe){
-  let s = String(maybe || "").trim();
-  s = s.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
-
-  const first = s.indexOf("{");
-  const last  = s.lastIndexOf("}");
-  if (first !== -1 && last !== -1 && last > first){
-    s = s.slice(first, last + 1);
-  }
-  return JSON.parse(s);
-}
-
-function buildGeminiPrompt(sym){
-  const st = stOf(sym);
-
-  const lastBars = st.k5Bars.slice(-6).map(b => ({
-    o:+b.o, h:+b.h, l:+b.l, c:+b.c,
-    v:+b.v,
-    imb:+b.imb,
-    dQ:+b.deltaQuote
-  }));
-
-  const summary = {
-    symbol: sym,
-
-    // anomalies
-    vol_z: st.volZ,
-    fund_z: st.fundZ,
-    vol5m_z: st.vol5mZ,
-    deltaQ_z: st.deltaQZ,
-    oi_z_5m: st.oi.oi5mZ,
-
-    // flow
-    imb_5m: st.imb5m,
-    imb_4h: st.imb4h,
-    taker_delta_5m_quote: st.delta5mQuote,
-    taker_delta_4h_quote: st.delta4hQuote,
-
-    // OI
-    oi_d_5m: st.oi.dOi5m,
-    oi_d_4h: st.oi.dOi4h,
-
-    // anti-chase
-    ret_5m_pct: st.ret5mPct,
-    premium_pct: st.premNow,
-    range_z: st.rangeZ,
-
-    // structure
-    pattern_tags: st.patternTags,
-    levels: st.levels,
-    dist_to_swingHigh_pct: st.dist.toHighPct,
-    dist_to_swingLow_pct: st.dist.toLowPct,
-    median_range_5m_pct: st.dist.medianRangePct,
-
-    last_price: st.lastP,
-    last_6x_5m: lastBars
-  };
-
-  return `
-你是「合約短線（5~10分鐘）做多訊號審核員」，只能根據我提供的摘要 JSON 判斷，不可使用外部資訊。
-目標：只評估【做多】機會。若不適合做多，bias 必須回 NEUTRAL。
-你必須輸出中文邏輯（logic/notes 都用中文），並給出「預計幾分鐘內表態」的區間。
-
-【表態定義】：
-- 突破表態：突破近 20 根 5m 的 swingHigh
-- 回踩續走表態：回踩 mid 或 swingHigh 附近後重新走強（需 flow/OI 支持）
-
-【摘要 JSON】
-${JSON.stringify(summary)}
-
-【只能輸出嚴格 JSON，不要任何多餘文字】
-schema:
-{
-  "symbol": "string",
-  "bias": "LONG|NEUTRAL",
-  "confidence": number,
-  "pattern": "breakout-pending|continuation-pullback|reversal|squeeze|chop",
-  "eta_minutes": { "min": number, "max": number, "logic": "string" },
-  "trigger": { "price": number, "logic": "string" },
-  "entry": { "type": "stop|limit|market", "price": number, "logic": "string" },
-  "stop": { "price": number, "logic": "string" },
-  "takeProfit": [ { "price": number, "logic": "string" } ],
-  "invalidation": "string",
-  "notes": [ "string" ]
-}
-  `.trim();
-}
-
-async function callGeminiFor(sym){
-  const key = getGeminiKey();
-  if (!key) throw new Error("缺少 Gemini key（先貼上再 Save）");
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.GEMINI.MODEL}:generateContent`;
-  const body = {
-    contents: [{ role: "user", parts: [{ text: buildGeminiPrompt(sym) }] }],
-    generationConfig: {
-      temperature: CFG.GEMINI.TEMP,
-      max_output_tokens: CFG.GEMINI.MAX_OUTPUT_TOKENS,
-      response_mime_type: "application/json"
+  S.wsMini.onclose = ()=>setHB(false);
+  S.wsMini.onerror = ()=>setHB(false);
+
+  // markPrice: premium/funding（全市場）
+  S.wsMark = new WebSocket(CFG.WS_MARK);
+  S.wsMark.onmessage = (e)=>{
+    S.lastHB = now();
+    setHB(true);
+    let arr;
+    try{ arr = JSON.parse(e.data); }catch(err){ return; }
+    if(!Array.isArray(arr)) return;
+    for(const it of arr){
+      const sym = it.s;
+      if(!S.sym.has(sym)) continue;
+      const st = S.sym.get(sym);
+      st.markPrice = Number(it.p);
+      st.indexPrice = Number(it.i);
+      const prem = (st.indexPrice ? (st.markPrice - st.indexPrice) / st.indexPrice : 0);
+      st.premiumPct = prem * 100;
+      st.fundingPct = Number(it.r) * 100;
     }
   };
+  S.wsMark.onclose = ()=>setHB(false);
+  S.wsMark.onerror = ()=>setHB(false);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type":"application/json", "x-goog-api-key": key },
-    body: JSON.stringify(body)
-  });
+  // aggTrade: 只訂閱 universe（合併 streams，拆多條 WS）
+  const streams = S.universe.map(s=>`${s.toLowerCase()}@aggTrade`);
+  const chunks = [];
+  for(let i=0;i<streams.length;i+=CFG.MAX_STREAMS_PER_WS){
+    chunks.push(streams.slice(i,i+CFG.MAX_STREAMS_PER_WS));
+  }
+  S.wsAgg = chunks.map(ch=>{
+    const url = CFG.WS_BASE + ch.join("/");
+    const ws = new WebSocket(url);
+    ws.onmessage = (e)=>{
+      S.lastHB = now();
+      setHB(true);
+      let msg;
+      try{ msg = JSON.parse(e.data); }catch(err){ return; }
+      if(!msg || !msg.data) return;
+      const d = msg.data;
+      const sym = d.s;
+      if(!S.sym.has(sym)) return;
+      const st = S.sym.get(sym);
 
-  const raw = await res.text();
-  if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${raw.slice(0,220)}`);
-
-  const json = JSON.parse(raw);
-  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-  try {
-    return safeParseJson(text);
-  } catch (e) {
-    // fallback object (still show in UI)
-    const st = stOf(sym);
-    return {
-      symbol: sym,
-      bias: "NEUTRAL",
-      confidence: 0,
-      pattern: "chop",
-      eta_minutes: { min: 0, max: 0, logic: "Gemini 回傳無法解析成 JSON（看 notes raw）" },
-      trigger: { price: st.lastP || 0, logic: "-" },
-      entry: { type: "market", price: st.lastP || 0, logic: "回傳非 JSON" },
-      stop: { price: st.lastP || 0, logic: "-" },
-      takeProfit: [],
-      invalidation: "-",
-      notes: [String(text).slice(0,400)]
+      const price = Number(d.p);
+      const qty = Number(d.q);
+      const ts = Number(d.T);
+      const isBuyerMaker = !!d.m; // true = taker sell, false = taker buy
+      onAggTrade(st, price, qty, isBuyerMaker, ts);
     };
+    ws.onclose = ()=>{};
+    ws.onerror = ()=>{};
+    return ws;
+  });
+}
+
+function stopWS(){
+  try{ if(S.wsMini) S.wsMini.close(); }catch(e){}
+  try{ if(S.wsMark) S.wsMark.close(); }catch(e){}
+  for(const ws of (S.wsAgg||[])){
+    try{ ws.close(); }catch(e){}
+  }
+  S.wsMini=null; S.wsMark=null; S.wsAgg=[];
+  setHB(false);
+}
+
+function onAggTrade(st, price, qty, isBuyerMaker, ts){
+  // notional 用 USDT 近似：qty*price
+  const notional = qty * price;
+  const sec = Math.floor(ts/1000);
+  const winStart = sec - 299;
+
+  // bucket
+  let b = st.secBuckets.get(sec);
+  if(!b){
+    b = { buy:0, sell:0, total:0, count:0 };
+    st.secBuckets.set(sec, b);
+  }
+  const buyAdd = isBuyerMaker ? 0 : notional;
+  const sellAdd = isBuyerMaker ? notional : 0;
+  b.buy += buyAdd;
+  b.sell += sellAdd;
+  b.total += notional;
+  b.count += 1;
+
+  st.sumBuy += buyAdd;
+  st.sumSell += sellAdd;
+  st.sumTotal += notional;
+  st.sumCount += 1;
+
+  // cleanup old seconds
+  for(const [k,v] of st.secBuckets){
+    if(k < winStart){
+      st.sumBuy -= v.buy;
+      st.sumSell -= v.sell;
+      st.sumTotal -= v.total;
+      st.sumCount -= v.count;
+      st.secBuckets.delete(k);
+    }
+  }
+
+  // build 1m candle from trades
+  const m = Math.floor(ts/60000);
+  if(st.curMin === null){
+    st.curMin = m;
+    st.curCandle = { t:m*60000, o:price, h:price, l:price, c:price, v:notional, buy:buyAdd, sell:sellAdd };
+  } else if(m === st.curMin){
+    const c = st.curCandle;
+    c.h = Math.max(c.h, price);
+    c.l = Math.min(c.l, price);
+    c.c = price;
+    c.v += notional;
+    c.buy += buyAdd;
+    c.sell += sellAdd;
+  } else if(m > st.curMin){
+    // close previous
+    finalizeCandle(st);
+    // new
+    st.curMin = m;
+    st.curCandle = { t:m*60000, o:price, h:price, l:price, c:price, v:notional, buy:buyAdd, sell:sellAdd };
   }
 }
 
-/* ===================== AI SUMMARY (Chinese) ===================== */
-function formatAiCN(ai){
-  const eta = ai?.eta_minutes ? `${ai.eta_minutes.min}~${ai.eta_minutes.max} 分鐘` : "-";
-  const trig = ai?.trigger?.price ?? "-";
-  const entry = ai?.entry ? `${typeCN(ai.entry.type)} @ ${ai.entry.price ?? "-"}` : "-";
-  const stop  = ai?.stop?.price ?? "-";
-  const tps   = Array.isArray(ai?.takeProfit) ? ai.takeProfit.map(x=>x.price).filter(v=>v!==undefined && v!==null).join(" / ") : "";
-  const conf  = (ai?.confidence ?? 0);
-  const bias  = biasCN(ai?.bias);
-  const patt  = patternCN(ai?.pattern);
+function finalizeCandle(st){
+  if(!st.curCandle) return;
+  st.candles.push(st.curCandle);
+  st.closes.push(st.curCandle.c);
+  if(st.candles.length > 240) st.candles.shift();
+  if(st.closes.length > 240) st.closes.shift();
 
-  const biasCls = (ai?.bias === "LONG") ? "ok font-bold" : "muted";
+  st.warmupMin = Math.min(CFG.WARMUP_MIN, st.candles.length);
+  // 每收一根 candle，就把「當下的 5m窗」指標 push 進歷史（用來算 z）
+  const buy = st.sumBuy, sell = st.sumSell, tot = st.sumTotal;
+  const delta = buy - sell;
+  const buyRatio = tot > 0 ? (buy / tot) : 0;
 
-  const notes = Array.isArray(ai?.notes) ? ai.notes.slice(0,3) : [];
-  const notesHtml = notes.length ? notes.map(x=>`• ${escapeHtml(String(x))}`).join("<br/>") : "-";
+  st.hist_delta5m.push(delta);
+  st.hist_vol5m.push(tot);
+  st.hist_buyRatio5m.push(buyRatio);
+  st.hist_premium.push(st.premiumPct ?? 0);
 
-  return `
-    <div class="text-[12px] text-white font-bold">AI 判讀（中文）</div>
-    <div class="text-[11px] mono mt-2 leading-relaxed">
-      <div>方向：<span class="${biasCls}">${bias}</span>｜信心：<span class="text-white font-bold">${conf}</span>/100</div>
-      <div>型態：<span class="text-white">${escapeHtml(String(patt))}</span></div>
-      <div>預計表態：<span class="text-white font-bold">${escapeHtml(String(eta))}</span></div>
-      <div>觸發價：<span class="text-white">${escapeHtml(String(trig))}</span></div>
-      <div>進場：<span class="text-white">${escapeHtml(String(entry))}</span></div>
-      <div>止損：<span class="text-white">${escapeHtml(String(stop))}</span></div>
-      <div>止盈：<span class="text-white">${escapeHtml(String(tps || "-"))}</span></div>
-      <div>失效條件：<span class="text-white">${escapeHtml(String(ai?.invalidation || "-"))}</span></div>
-      <div class="muted mt-2">備註：<br/>${notesHtml}</div>
-    </div>
-  `;
+  if(st.hist_delta5m.length > 240) st.hist_delta5m.shift();
+  if(st.hist_vol5m.length > 240) st.hist_vol5m.shift();
+  if(st.hist_buyRatio5m.length > 240) st.hist_buyRatio5m.shift();
+  if(st.hist_premium.length > 240) st.hist_premium.shift();
 }
 
-/* ===================== RENDER ===================== */
+/** =========================
+ *  7) 指標計算（只做多）
+ * ========================= */
+function calcATR20(candles){
+  if(!candles || candles.length < 21) return null;
+  const trs = [];
+  for(let i=1;i<candles.length;i++){
+    const c = candles[i], p = candles[i-1];
+    const tr = Math.max(c.h-c.l, Math.abs(c.h-p.c), Math.abs(c.l-p.c));
+    trs.push(tr);
+  }
+  const last20 = trs.slice(-20);
+  return mean(last20);
+}
+
+function calcMA(arr, n){
+  if(!arr || arr.length < n) return null;
+  const slice = arr.slice(-n);
+  return mean(slice);
+}
+
+function calcRetPct(closes, n){
+  if(!closes || closes.length < n+1) return 0;
+  const a = closes[closes.length-1-n];
+  const b = closes[closes.length-1];
+  if(!a) return 0;
+  return (b-a)/a*100;
+}
+
+function calcSqueezeZ(closes){
+  // Bollinger bandwidth z：越負越收斂
+  if(!closes || closes.length < 40) return 0;
+  const bwArr = [];
+  for(let i=20;i<=closes.length;i++){
+    const w = closes.slice(i-20, i);
+    const m = mean(w);
+    const sd = std(w);
+    const up = m + 2*sd, dn = m - 2*sd;
+    const bw = m ? ((up-dn)/m) : 0;
+    bwArr.push(bw);
+  }
+  const cur = bwArr[bwArr.length-1];
+  const base = bwArr.slice(0, -1);
+  return zScore(cur, base) * 1.0; // 負值表示更擠
+}
+
+function calcSlopeZ(arr){
+  // 用最後 6 點（約 6 分鐘）做斜率，和歷史斜率比 z
+  if(!arr || arr.length < 30) return 0;
+  function slope(seq){
+    const n=seq.length;
+    const xs = Array.from({length:n}, (_,i)=>i);
+    const xM = mean(xs), yM = mean(seq);
+    let num=0, den=0;
+    for(let i=0;i<n;i++){
+      num += (xs[i]-xM)*(seq[i]-yM);
+      den += (xs[i]-xM)*(xs[i]-xM);
+    }
+    return den ? num/den : 0;
+  }
+  const w = 6;
+  const slopes = [];
+  for(let i=w;i<=arr.length;i++){
+    const seg = arr.slice(i-w,i);
+    slopes.push(slope(seg));
+  }
+  const cur = slopes[slopes.length-1];
+  const base = slopes.slice(0,-1);
+  return zScore(cur, base);
+}
+
+function updateScores(){
+  // 每秒/每根 candle 都可算，但這裡用每秒 render 前算一次就好
+  for(const sym of S.universe){
+    const st = S.sym.get(sym);
+    if(!st) continue;
+
+    // ready：5m 內成交筆數夠 + 至少有一些 candles
+    st.ready = (st.sumCount >= CFG.MIN_TRADES_FOR_READY) && (st.candles.length >= 10);
+
+    // 基本 5m 指標
+    const buy = st.sumBuy, sell = st.sumSell, tot = st.sumTotal;
+    const delta = buy - sell;
+    const buyRatio = tot > 0 ? (buy / tot) : 0;
+    st.buyRatio = buyRatio;
+
+    // 5m 漲幅（用 closes 推估）
+    st.ret5mPct = calcRetPct(st.closes, 5);
+
+    // MA/ATR（anti-chase）
+    st.ma20 = calcMA(st.closes, 20);
+    st.atr20 = calcATR20(st.candles);
+
+    // 收斂指標
+    st.squeezeZ = calcSqueezeZ(st.closes);
+
+    // 量/差額 z（相對自己過去）
+    st.deltaZ = zScore(delta, st.hist_delta5m.slice(0,-1));
+    st.volZ   = zScore(tot, st.hist_vol5m.slice(0,-1));
+
+    // premium slope z
+    st.premSlopeZ = calcSlopeZ(st.hist_premium);
+
+    // OI z（若有）
+    // st.oiZ 已在 OI 更新時計算
+
+    // anti-chase：距離 MA20 的 ATR 倍數
+    let distMaAtr = 0;
+    if(st.ma20 && st.atr20 && st.atr20>0 && st.price){
+      distMaAtr = Math.abs(st.price - st.ma20) / st.atr20;
+    }
+
+    // 長趨勢簡易濾網：近 20m 回撤不要太差
+    const ret20m = calcRetPct(st.closes, 20);
+
+    // 只做多：必要條件
+    const longOk =
+      buyRatio >= CFG.MIN_BUY_RATIO &&
+      delta > 0 &&
+      ret20m > -0.8; // 不要在明顯下跌趨勢硬撿
+
+    // 反追高
+    const chaseBad =
+      (st.ret5mPct > CFG.MAX_RET5M_PCT) ||
+      (distMaAtr > CFG.MAX_DIST_MA20_ATR);
+
+    // stage 判斷（🟨🟧🟩）
+    let stage = "WARMUP";
+    const warmEnough = st.candles.length >= CFG.WARMUP_MIN;
+
+    const setup =
+      warmEnough &&
+      longOk &&
+      !chaseBad &&
+      st.squeezeZ < -0.7 &&     // 收斂
+      st.volZ > -0.3;           // 量不要完全死水（但不要求爆量）
+
+    const ignite =
+      setup &&
+      st.volZ > 0.7 &&          // 量放大（相對自己）
+      st.deltaZ > 0.7 &&        // 主動買差額異常
+      (st.oiZ > 0.4 || st.oi4h !== null) && // 有 OI 支撐（沒抓到也不直接判死）
+      st.ret5mPct < CFG.MAX_RET5M_PCT;
+
+    const confirm =
+      ignite &&
+      st.volZ > 1.3 &&
+      st.deltaZ > 1.2 &&
+      st.ret5mPct > 0.15; // 已開始表態但還沒噴很遠
+
+    if(confirm) stage = "CONFIRM";
+    else if(ignite) stage = "IGNITE";
+    else if(setup) stage = "SETUP";
+    else stage = warmEnough ? "WARMUP" : "WARMUP";
+
+    // tags（給 Gemini 用）
+    const tags = [];
+    if(st.squeezeZ < -0.8) tags.push("收斂蓄勢");
+    if(st.deltaZ > 1.0) tags.push("主動買入異常");
+    if(st.volZ > 1.0) tags.push("成交量異常");
+    if(st.premSlopeZ > 0.8) tags.push("溢價走強");
+    if(st.fundingPct !== null && st.fundingPct > 0.02) tags.push("資金費率偏多");
+    if(chaseBad) tags.push("追高風險");
+    if(ret20m < -0.3) tags.push("短線偏弱");
+
+    st.tags = tags;
+    st.stage = stage;
+
+    // persist（續力判斷）
+    if(st.persist.lastStage !== stage){
+      st.persist.lastStage = stage;
+      st.persist.stageSince = now();
+    }
+
+    // score（0~100）
+    // 注意：squeezeZ 越負越好 → 轉成正分：(-squeezeZ)
+    const s_squeeze = clamp((-st.squeezeZ)/2.5, 0, 1);
+    const s_delta   = clamp((st.deltaZ)/2.5, 0, 1);
+    const s_oi      = clamp((st.oiZ)/2.5, 0, 1);
+    const s_vol     = clamp((st.volZ)/2.5, 0, 1);
+    const s_prem    = clamp((st.premSlopeZ)/2.5, 0, 1);
+
+    let score =
+      100 * (
+        WEIGHTS.squeeze*s_squeeze +
+        WEIGHTS.delta*s_delta +
+        WEIGHTS.oi*s_oi +
+        WEIGHTS.vol*s_vol +
+        WEIGHTS.prem*s_prem
+      );
+
+    // 懲罰：追高 / 下跌
+    if(!longOk) score *= 0.45;
+    if(chaseBad) score *= 0.70;
+    if(ret20m < -0.6) score *= 0.70;
+
+    // stage boost（讓榜更像你要的「噴前提示」）
+    if(stage==="SETUP") score += 4;
+    if(stage==="IGNITE") score += 10;
+    if(stage==="CONFIRM") score += 16;
+
+    st.score = clamp(score, 0, 100);
+  }
+}
+
+/** =========================
+ *  8) OI（只抓 Top 候選，避免 HTTP 壓力）
+ * ========================= */
+async function refreshOIFor(symbol){
+  // fapi openInterestHist
+  const url = `${CFG.HTTP}/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=100`;
+  const {ok, json} = await fetchJson(url);
+  if(!ok || !Array.isArray(json) || json.length<10) return;
+
+  const st = S.sym.get(symbol);
+  if(!st) return;
+
+  // json element: {sumOpenInterest, timestamp, ...}（可能欄位名略不同）
+  const series = json.map(x=>{
+    const oi = Number(x.sumOpenInterest ?? x.openInterest ?? x.sumOpenInterestValue ?? 0);
+    const ts = Number(x.timestamp ?? x.time ?? 0);
+    return {ts, oi};
+  }).filter(x=>x.ts && Number.isFinite(x.oi));
+
+  if(series.length < 10) return;
+  st.oiSeries = series;
+
+  const last = series[series.length-1].oi;
+  const prev = series[series.length-2].oi;
+  const ago4h = series[Math.max(0, series.length-1-48)].oi; // 48*5m = 240m = 4h
+  const ago8h = series[Math.max(0, series.length-1-96)].oi;
+
+  st.oi5m = last - prev;
+  st.oi4h = last - ago4h;
+  st.oiPrev4h = ago4h - ago8h;
+
+  // OI Z：用 5m 變化 vs 過去 4h 的 5m 變化
+  const deltas = [];
+  for(let i=1;i<series.length;i++){
+    deltas.push(series[i].oi - series[i-1].oi);
+  }
+  const cur = deltas[deltas.length-1];
+  const base = deltas.slice(0,-1);
+  st.oiZ = zScore(cur, base);
+}
+
+async function oiLoop(){
+  // 只抓 Top 8（避免過量）
+  const top = [...S.top5].slice(0, 8);
+  for(const st of top){
+    try{ await refreshOIFor(st.symbol); }catch(e){}
+  }
+}
+
+/** =========================
+ *  9) Top5（含鎖榜/最強置頂）
+ * ========================= */
+function computeTop5(){
+  // 先用分數挑（只要有點交易量/資料）
+  let arr = [];
+  for(const sym of S.universe){
+    const st = S.sym.get(sym);
+    if(!st) continue;
+    if(!st.ready) continue;
+    // 只做多：不把明顯偏空的推上榜（仍可顯示，但分數會很低）
+    arr.push(st);
+  }
+  arr.sort((a,b)=>b.score - a.score);
+
+  // Top5 基礎
+  let top = arr.slice(0, CFG.TOP_N);
+
+  // 最強置頂鎖定
+  const best = top[0] || null;
+  const t = now();
+  if(best){
+    if(!S.leader.symbol){
+      S.leader = { symbol: best.symbol, score: best.score, since: t };
+    } else {
+      const leaderSt = S.sym.get(S.leader.symbol);
+      const leaderAlive = leaderSt && leaderSt.ready;
+      const heldLongEnough = (t - S.leader.since) >= CFG.LEADER_MIN_HOLD_MS;
+      const challengerBetter = (best.symbol !== S.leader.symbol) && (best.score >= (S.leader.score + CFG.LEADER_SWAP_DELTA));
+
+      if(!leaderAlive){
+        S.leader = { symbol: best.symbol, score: best.score, since: t };
+      } else if(heldLongEnough && challengerBetter){
+        S.leader = { symbol: best.symbol, score: best.score, since: t };
+      } else {
+        // 更新 leader score（避免一直用舊分）
+        if(leaderSt) S.leader.score = leaderSt.score;
+      }
+    }
+  }
+
+  // 把 leader 插到最前（如果 leader 不在 top，就把它塞進來取代最後一個）
+  if(S.leader.symbol){
+    const leaderIn = top.find(x=>x.symbol===S.leader.symbol);
+    if(!leaderIn){
+      const leaderSt = S.sym.get(S.leader.symbol);
+      if(leaderSt && leaderSt.ready){
+        top[top.length-1] = leaderSt;
+      }
+    }
+    // 置頂
+    top.sort((a,b)=>{
+      if(a.symbol===S.leader.symbol) return -1;
+      if(b.symbol===S.leader.symbol) return 1;
+      return b.score - a.score;
+    });
+  }
+
+  // Top5 列表鎖（避免一直跳）
+  if(t < S.top5LockedUntil && S.top5.length){
+    // 若 leader 還活著就沿用舊 top5，但更新引用（分數/數值會跟著變）
+    const locked = [];
+    for(const old of S.top5){
+      const cur = S.sym.get(old.symbol);
+      if(cur && cur.ready) locked.push(cur);
+    }
+    // 不足就補
+    for(const st of top){
+      if(locked.length>=CFG.TOP_N) break;
+      if(!locked.find(x=>x.symbol===st.symbol)) locked.push(st);
+    }
+    S.top5 = locked.slice(0, CFG.TOP_N);
+  } else {
+    S.top5 = top;
+    S.top5LockedUntil = t + CFG.TOPLIST_HYSTERESIS_MS;
+  }
+}
+
+/** =========================
+ *  10) Gemini（修正：Test 用自己的 schema；交易分析用交易 schema）
+ * ========================= */
+function setGeminiStatus(msg){ $("geminiStatus").innerText = "Gemini：" + msg; }
+
+function getGeminiKey(){
+  return (S.geminiKey || "").trim();
+}
+
+// Trading schema（你要的：分數、進場、停損、狀態、預估表態分鐘區間）
+function geminiTradeSchema(){
+  return {
+    type: "object",
+    properties: {
+      symbol: { type: "string" },
+      direction: { type: "string", enum: ["LONG","WAIT"] },
+      confidence: { type: "integer", minimum: 0, maximum: 100 },
+      etaMinutes: {
+        type: "object",
+        properties: {
+          min: { type: "integer", minimum: 0, maximum: 60 },
+          max: { type: "integer", minimum: 0, maximum: 60 }
+        },
+        required: ["min","max"]
+      },
+      stage: { type: "string", enum: ["SETUP","IGNITE","CONFIRM"] },
+      pattern: { type: "string" },
+      entry: {
+        type: "object",
+        properties: {
+          type: { type: "string", enum: ["market","breakout","pullback","wait"] },
+          price: { type: "number" },
+          logic: { type: "string" }
+        },
+        required: ["type","price","logic"]
+      },
+      stop: {
+        type: "object",
+        properties: {
+          price: { type: "number" },
+          logic: { type: "string" }
+        },
+        required: ["price","logic"]
+      },
+      takeProfits: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            price: { type: "number" },
+            portionPct: { type: "integer", minimum: 1, maximum: 100 },
+            logic: { type: "string" }
+          },
+          required: ["price","portionPct","logic"]
+        },
+        minItems: 1,
+        maxItems: 3
+      },
+      invalidation: { type: "string" },
+      reasons: { type: "array", items: { type:"string" }, minItems: 2, maxItems: 6 }
+    },
+    required: ["symbol","direction","confidence","etaMinutes","stage","pattern","entry","stop","takeProfits","invalidation","reasons"]
+  };
+}
+
+// Test schema（避免你之前那個「200 但沒 JSON」）
+function geminiTestSchema(){
+  return {
+    type:"object",
+    properties:{
+      ok:{ type:"boolean" },
+      msg:{ type:"string" }
+    },
+    required:["ok","msg"]
+  };
+}
+
+async function geminiCall({prompt, schema, maxOut=CFG.GEMINI_MAX_OUT}){
+  const key = getGeminiKey();
+  if(!key) return { ok:false, err:"NO_KEY" };
+
+  if(now() < S.geminiBackoffUntil){
+    const left = Math.ceil((S.geminiBackoffUntil - now())/1000);
+    return { ok:false, err:`BACKOFF_${left}s` };
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+
+  const body = {
+    contents: [{ role:"user", parts:[{ text: prompt }]}],
+    generationConfig: {
+      temperature: CFG.GEMINI_TEMP,
+      topK: CFG.GEMINI_TOPK,
+      maxOutputTokens: maxOut,
+      responseMimeType: "application/json",
+      responseSchema: schema
+    }
+  };
+
+  let resp, txt, data;
+  try{
+    resp = await fetch(url, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    txt = await resp.text();
+    try{ data = JSON.parse(txt); }catch(e){ data = null; }
+  }catch(e){
+    return { ok:false, err:"NETWORK", raw:String(e) };
+  }
+
+  // 429 backoff
+  if(resp.status === 429){
+    // 先退 90 秒，再逐次延長（簡化）
+    const back = 90*1000;
+    S.geminiBackoffUntil = now() + back;
+    $("quotaStatus").innerText = `Backoff：429 → ${Math.ceil(back/1000)}s`;
+    return { ok:false, err:"HTTP_429", raw:txt };
+  }
+
+  if(!resp.ok){
+    return { ok:false, err:`HTTP_${resp.status}`, raw:txt };
+  }
+
+  // 正常：取 candidates[0].content.parts[0].text
+  let modelText = "";
+  try{
+    modelText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  }catch(e){ modelText = ""; }
+
+  // 如果 parts 沒 text，直接把整包 txt 當 raw（方便除錯）
+  const parsed = safeJsonParseText(modelText || txt);
+  if(!parsed){
+    console.log("Gemini RAW (HTTP200 but parse fail):", txt);
+    console.log("Gemini extracted modelText:", modelText);
+    return { ok:false, err:"NO_VALID_JSON", raw: (modelText || txt) };
+  }
+  return { ok:true, data: parsed, raw: (modelText || txt) };
+}
+
+/** =========================
+ *  11) Gemini Prompt（精簡摘要，不丟整包 K 線）
+ * ========================= */
+function buildCandidateSummary(st){
+  const distMaAtr = (st.ma20 && st.atr20 && st.atr20>0 && st.price)
+    ? (Math.abs(st.price - st.ma20)/st.atr20)
+    : null;
+
+  return {
+    symbol: st.symbol,
+    price: st.price,
+    stage: st.stage,
+    score: Math.round(st.score),
+    squeezeZ: Number(st.squeezeZ.toFixed(2)),
+    delta5mUSDT: Math.round((st.sumBuy - st.sumSell)),
+    deltaZ: Number(st.deltaZ.toFixed(2)),
+    buyRatio5m: Number(st.buyRatio.toFixed(3)),
+    vol5mUSDT: Math.round(st.sumTotal),
+    volZ: Number(st.volZ.toFixed(2)),
+    ret5mPct: Number(st.ret5mPct.toFixed(2)),
+    premiumPct: Number((st.premiumPct ?? 0).toFixed(3)),
+    fundingPct: Number((st.fundingPct ?? 0).toFixed(4)),
+    premSlopeZ: Number(st.premSlopeZ.toFixed(2)),
+    oi5m: st.oi5m===null? null : Number(st.oi5m.toFixed(2)),
+    oi4h: st.oi4h===null? null : Number(st.oi4h.toFixed(2)),
+    oiZ: Number((st.oiZ ?? 0).toFixed(2)),
+    distMA20_ATR: distMaAtr===null? null : Number(distMaAtr.toFixed(2)),
+    tags: st.tags.slice(0,6)
+  };
+}
+
+function buildGeminiPromptForOne(st){
+  const s = buildCandidateSummary(st);
+  return [
+`你是合約交易輔助，只做多（LONG-only）。`,
+`我會給你「前端已計算好的精簡摘要」，不要要求更多K線資料。`,
+`任務：判斷是否值得做多，並給出可執行計畫。`,
+`輸出必須是「單一 JSON」，且完全符合 schema，不要多任何字。`,
+``,
+`【市場摘要】`,
+JSON.stringify(s, null, 2),
+``,
+`【規則】`,
+`- 如果不建議做多：direction=WAIT，confidence 給低，entry.type=wait；仍要填 entry/stop/takeProfits（可用當前價附近與保守）`,
+`- etaMinutes：預估幾分鐘內可能「表態」（例如 5~10、10~20）`,
+`- stage 必須是 SETUP / IGNITE / CONFIRM（對應我給的 stage）`,
+`- entry/stop/takeProfits：用目前價 + 結構（例如 ATR、箱體）給出具體價位`,
+`- takeProfits 分 2~3 段，portionPct 加總=100`,
+`- reasons：3~6 點，中文、短句`,
+``
+  ].join("\n");
+}
+
+function buildGeminiPromptForTop(list){
+  const payload = list.map(buildCandidateSummary);
+  return [
+`你是合約交易輔助，只做多（LONG-only）。`,
+`我會給你 Top 候選的精簡摘要（每個幣一筆），不要要求更多K線資料。`,
+`任務：挑出「最值得做多」的 1~2 個（如果都不適合就都 WAIT），並逐一輸出 JSON 物件陣列。`,
+`注意：輸出必須是「JSON 陣列」，每個元素符合 schema。不要多任何字。`,
+``,
+`【Top 候選摘要】`,
+JSON.stringify(payload, null, 2),
+``
+  ].join("\n");
+}
+
+// Top 批次分析用 schema：array of trade schema
+function geminiTradeArraySchema(){
+  return {
+    type:"array",
+    items: geminiTradeSchema(),
+    minItems: 1,
+    maxItems: 3
+  };
+}
+
+/** =========================
+ *  12) AI 顯示（中文可讀）
+ * ========================= */
+function stageBadge(stage){
+  if(stage==="SETUP") return `<span class="badge badge-setup text-[10px] px-2 py-0.5 rounded-full">🟨 蓄勢</span>`;
+  if(stage==="IGNITE") return `<span class="badge badge-ignite text-[10px] px-2 py-0.5 rounded-full">🟧 點火</span>`;
+  if(stage==="CONFIRM") return `<span class="badge badge-confirm text-[10px] px-2 py-0.5 rounded-full">🟩 觸發</span>`;
+  return `<span class="badge text-[10px] px-2 py-0.5 rounded-full muted">熱機中</span>`;
+}
+
+function aiToChineseView(ai){
+  // ai: trade schema
+  const dir = ai.direction==="LONG" ? "做多" : "觀望";
+  const eta = `${ai.etaMinutes?.min ?? 0}~${ai.etaMinutes?.max ?? 0} 分鐘`;
+  const conf = `${ai.confidence ?? 0}/100`;
+
+  const entryTypeMap = { market:"市價", breakout:"突破", pullback:"回踩", wait:"等待" };
+  const entryType = entryTypeMap[ai.entry?.type] ?? "—";
+
+  const tps = (ai.takeProfits||[]).map(tp=>`TP ${fmtN(tp.price, 6)}（${tp.portionPct}%）`).join(" / ");
+
+  const reasons = (ai.reasons||[]).map(x=>`• ${x}`).join("\n");
+
+  return `
+方向：${dir}｜信心：${conf}
+預估表態：${eta}
+狀態：${ai.stage}｜型態：${ai.pattern || "-"}
+進場：${entryType} @ ${fmtN(ai.entry?.price, 6)}
+停損：@ ${fmtN(ai.stop?.price, 6)}
+止盈：${tps || "-"}
+失效條件：${ai.invalidation || "-"}
+理由：
+${reasons || "• -"}
+`.trim();
+}
+
+/** =========================
+ *  13) Render（卡片左中文/右AI）
+ * ========================= */
 function render(){
-  const hb = document.getElementById('hb');
-  const alive = (nowMs() - lastHeartbeat) < 5000;
-  hb.className = `inline-block w-2 h-2 rounded-full ${alive ? 'bg-emerald-500' : 'bg-zinc-600'}`;
+  // heartbeat
+  if(now() - S.lastHB > 3500) setHB(false);
 
-  document.getElementById('autoOn').innerText = getGeminiKey() ? "ON" : "OFF";
+  $("clock").innerText = `更新：${new Date().toLocaleTimeString()}`;
+  const backLeft = Math.max(0, S.geminiBackoffUntil - now());
+  $("quotaStatus").innerText = backLeft>0 ? `Backoff：${Math.ceil(backLeft/1000)}s` : `Backoff：-`;
 
-  const zReady = [...S.values()].filter(x => x.volZ !== null).length;
-  const lockInfo = lockedSym ? `LOCK=${lockedSym} (持有${Math.floor((nowMs()-lockedAt)/1000)}s)` : "LOCK=-";
+  const root = $("top5");
+  root.innerHTML = "";
 
-  document.getElementById('status').innerText =
-    `universe=${symbolsAll.length} | states=${S.size} | zReady=${zReady} | candidates=${candidates.length} | show=${displayList.length} | ${lockInfo} | hbAgeMs=${nowMs()-lastHeartbeat}`;
+  for(const st of S.top5){
+    const isLeader = (S.leader.symbol === st.symbol);
 
-  const wrap = document.getElementById('top5');
-  wrap.innerHTML = "";
+    const longBias = (st.buyRatio >= CFG.MIN_BUY_RATIO && (st.sumBuy-st.sumSell)>0) ? "LONG-ish" : "NEUTRAL";
+    const leaderBadge = isLeader ? `<span class="badge badge-leader text-[10px] px-2 py-0.5 rounded-full">👑 最強鎖定</span>` : "";
 
-  for (let idx=0; idx<displayList.length; idx++){
-    const row = displayList[idx];
-    const sym = row.sym;
-    const st = stOf(sym);
+    const key = st.symbol;
+    const ai = S.aiCache.get(key)?.data || null;
 
-    const isLocked = (sym === lockedSym);
-    const ai = aiBySym.get(sym);
+    const aiText = ai ? aiToChineseView(ai) : `尚未分析：按右上【Gemini】或【Analyze Top】\n（Auto：續力才會打，且有 cooldown）`;
 
-    // left side tags and badges
-    const badges = [];
-    if (isLocked) badges.push(`<span class="badge text-emerald-300">🎯 最強追蹤</span>`);
-    badges.push(`<span class="badge muted">score ${fmt(st.score,2)}</span>`);
+    const warmTxt = st.candles.length < CFG.WARMUP_MIN
+      ? `熱機中：${st.candles.length}/${CFG.WARMUP_MIN} 分鐘`
+      : `熱機完成`;
 
-    const hasFlow = (st.imb5m !== null && st.delta5mQuote !== null);
-    if (!hasFlow) badges.push(`<span class="badge warn">等待 5m 收線</span>`);
-
-    // right side AI summary
-    const aiHtml = ai ? formatAiCN(ai) : `<div class="text-[11px] muted">尚未分析：按右上「Gemini」或「分析 Top」</div>`;
-
-    const card = document.createElement('div');
-    card.className = `p-3 rounded-lg border border-zinc-800 bg-black/20 ${isLocked ? 'locked' : ''}`;
-
-    card.innerHTML = `
-      <div class="flex flex-col lg:flex-row gap-3">
-        <!-- LEFT: metrics -->
-        <div class="flex-1">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-white font-black text-lg">${sym}</div>
-              <div class="text-[11px] muted mono mt-1">${badges.join(" ")}</div>
-              <div class="text-[11px] muted mono mt-1">型態標籤：${(st.patternTags||[]).join(" / ") || "-"}</div>
-            </div>
-            <div class="flex items-center gap-2">
-              <button class="px-3 py-2 rounded text-[12px] font-black bg-zinc-800 hover:bg-zinc-700 text-white" data-sym="${sym}">
-                Gemini
-              </button>
-            </div>
+    root.insertAdjacentHTML("beforeend", `
+      <div class="card rounded-xl p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="text-white font-black text-lg">${st.symbol}</div>
+            ${leaderBadge}
+            ${stageBadge(st.stage)}
+            <span class="badge text-[10px] px-2 py-0.5 rounded-full">${longBias}</span>
+            <span class="badge text-[10px] px-2 py-0.5 rounded-full">score ${fmtN(st.score, 2)}</span>
+            <span class="muted text-[10px]">${warmTxt}</span>
           </div>
-
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-[11px] mono">
-            <div class="pill rounded px-2 py-1">波動異常Z：<span class="text-white">${fmt(st.volZ,2)}</span></div>
-            <div class="pill rounded px-2 py-1">資費斜率Z：<span class="text-white">${fmt(st.fundZ,2)}</span></div>
-            <div class="pill rounded px-2 py-1">5分鐘漲跌：<span class="text-white">${pct(st.ret5mPct,2)}</span></div>
-
-            <div class="pill rounded px-2 py-1">溢價(標記-指數)：<span class="text-white">${pct(st.premNow,3)}</span></div>
-            <div class="pill rounded px-2 py-1">主動買入比例(5m)：<span class="text-white">${fmt(st.imb5m,3)}</span></div>
-            <div class="pill rounded px-2 py-1">主動買入比例(4h)：<span class="text-white">${fmt(st.imb4h,3)}</span></div>
-
-            <div class="pill rounded px-2 py-1">主動買入差額(5m,金額)：<span class="text-white">${fmt(st.delta5mQuote,0)}</span></div>
-            <div class="pill rounded px-2 py-1">主動買入差額(4h,金額)：<span class="text-white">${fmt(st.delta4hQuote,0)}</span></div>
-            <div class="pill rounded px-2 py-1">差額異常Z：<span class="text-white">${fmt(st.deltaQZ,2)}</span></div>
-
-            <div class="pill rounded px-2 py-1">成交量異常Z(5m)：<span class="text-white">${fmt(st.vol5mZ,2)}</span></div>
-            <div class="pill rounded px-2 py-1">OI異常Z(5m)：<span class="text-white">${fmt(st.oi.oi5mZ,2)}</span></div>
-            <div class="pill rounded px-2 py-1">OI變化(4h)：<span class="text-white">${fmt(st.oi.dOi4h,2)}</span></div>
-
-            <div class="pill rounded px-2 py-1">距高/低點(%)：<span class="text-white">${fmt(st.dist.toHighPct,2)}/${fmt(st.dist.toLowPct,2)}</span></div>
-            <div class="pill rounded px-2 py-1">5m中位波幅(%)：<span class="text-white">${fmt(st.dist.medianRangePct,2)}</span></div>
-            <div class="pill rounded px-2 py-1">關鍵位：<span class="text-white">${fmt(st.levels.swingLow,6)} ~ ${fmt(st.levels.swingHigh,6)}</span></div>
+          <div class="flex items-center gap-2">
+            <button class="btn text-[11px] px-3 py-1 rounded font-bold" onclick="analyzeOne('${st.symbol}')">Gemini</button>
           </div>
         </div>
 
-        <!-- RIGHT: AI -->
-        <div class="w-full lg:w-[380px] shrink-0">
-          <div class="p-3 rounded-lg border border-zinc-800 bg-black/30 h-full">
-            ${aiHtml}
+        <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <!-- LEFT: 指標中文 -->
+          <div class="grid grid-cols-1 gap-2">
+            <div class="grid-3">
+              <div class="aiBox rounded px-3 py-2"><div class="k">價格</div><div class="v">${st.price?("$"+fmtN(st.price, 6)):"-"}</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">5分漲跌</div><div class="v">${fmtN(st.ret5mPct,2)}%</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">溢價(標記-指數)</div><div class="v">${fmtN(st.premiumPct,3)}%</div></div>
+            </div>
+
+            <div class="grid-3">
+              <div class="aiBox rounded px-3 py-2"><div class="k">主動買入佔比(5m)</div><div class="v">${fmtN(st.buyRatio,3)}</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">主動買入差額(5m,USDT)</div><div class="v">${fmtMoney(st.sumBuy-st.sumSell)}</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">差額異常Z(5m)</div><div class="v">${fmtN(st.deltaZ,2)}</div></div>
+            </div>
+
+            <div class="grid-3">
+              <div class="aiBox rounded px-3 py-2"><div class="k">成交量(5m,USDT)</div><div class="v">${fmtMoney(st.sumTotal)}</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">成交量異常Z(5m)</div><div class="v">${fmtN(st.volZ,2)}</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">收斂異常Z</div><div class="v">${fmtN(st.squeezeZ,2)}</div></div>
+            </div>
+
+            <div class="grid-3">
+              <div class="aiBox rounded px-3 py-2"><div class="k">OI變化(5m)</div><div class="v">${st.oi5m===null?"-":fmtN(st.oi5m,2)}</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">OI變化(4h)</div><div class="v">${st.oi4h===null?"-":fmtN(st.oi4h,2)}</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">OI異常Z</div><div class="v">${fmtN(st.oiZ,2)}</div></div>
+            </div>
+
+            <div class="grid-2">
+              <div class="aiBox rounded px-3 py-2"><div class="k">資金費率(即時)</div><div class="v">${st.fundingPct===null?"-":fmtN(st.fundingPct,4)}%</div></div>
+              <div class="aiBox rounded px-3 py-2"><div class="k">溢價斜率Z</div><div class="v">${fmtN(st.premSlopeZ,2)}</div></div>
+            </div>
+
+            <div class="aiBox rounded px-3 py-2">
+              <div class="k">型態標籤</div>
+              <div class="v">${(st.tags && st.tags.length) ? st.tags.join(" / ") : "-"}</div>
+            </div>
+          </div>
+
+          <!-- RIGHT: AI -->
+          <div class="aiBox rounded p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-white font-black">AI 判斷（中文）</div>
+              <div class="muted text-[10px]">model: ${CFG.GEMINI_MODEL}｜max_out=${CFG.GEMINI_MAX_OUT}</div>
+            </div>
+            <pre class="text-[12px] leading-relaxed whitespace-pre-wrap">${aiText}</pre>
+            ${S.aiCache.get(key)?.raw && !ai ? `<details class="mt-2"><summary class="muted text-[11px] cursor-pointer">raw（除錯）</summary><pre class="text-[11px] whitespace-pre-wrap muted mt-2">${escapeHtml(S.aiCache.get(key).raw).slice(0,1200)}</pre></details>`:""}
           </div>
         </div>
       </div>
-    `;
-
-    card.querySelector('button').onclick = async () => { await analyzeOne(sym); };
-    wrap.appendChild(card);
+    `);
   }
 }
 
-/* ===================== PIPELINE ===================== */
-async function tickPipeline(){
-  computeCandidates();
-  connectKlineForCandidates();
-  await refreshOIForStrongOnes();
-  computeTopAndLock();
+function escapeHtml(s){
+  return String(s||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;");
 }
 
-/* ===================== GEMINI ACTIONS ===================== */
-async function analyzeOne(sym){
-  const lastTs = lastGeminiSymAt.get(sym) || 0;
-  if (nowMs() - lastTs < CFG.GEMINI.SYMBOL_COOLDOWN_MS){
-    // cooldown -> still render existing
+/** =========================
+ *  14) Auto Analyze（續力才打）
+ * ========================= */
+function shouldAutoAnalyze(st){
+  if(!st) return false;
+  if(st.stage!=="IGNITE" && st.stage!=="CONFIRM") return false;
+
+  // 續力：同 stage 至少 35 秒
+  const dur = now() - (st.persist.stageSince || now());
+  if(dur < 35000) return false;
+
+  // cooldown：避免同幣一直打
+  const cached = S.aiCache.get(st.symbol);
+  if(cached && (now()-cached.ts) < S.aiCooldownMs) return false;
+
+  // backoff 中不打
+  if(now() < S.geminiBackoffUntil) return false;
+
+  return true;
+}
+
+async function autoAnalyzeLoop(){
+  if(!$("autoToggle").checked) return;
+  if(now() - S.lastTopAnalyze < CFG.AUTO_EVERY_MS-2000) return;
+  S.lastTopAnalyze = now();
+
+  if(S.top5.length < 5){
+    setGeminiStatus("Top5 未滿 5 支，略過");
     return;
   }
 
-  // temporary placeholder (so you see "分析中" on right side)
-  aiBySym.set(sym, {
-    symbol: sym, bias: "NEUTRAL", confidence: 0, pattern: "chop",
-    eta_minutes: {min:0,max:0,logic:"分析中…"},
-    trigger:{price:0,logic:"-"},
-    entry:{type:"market",price:0,logic:"-"},
-    stop:{price:0,logic:"-"},
-    takeProfit:[],
-    invalidation:"-",
-    notes:["分析中…"]
-  });
-  render();
+  const candidates = S.top5
+    .slice()
+    .sort((a,b)=>b.score-a.score)
+    .slice(0, CFG.ANALYZE_TOPK)
+    .filter(shouldAutoAnalyze);
 
-  try{
-    const res = await callGeminiFor(sym);
-    aiBySym.set(sym, res);
-    lastGeminiSymAt.set(sym, nowMs());
-    render();
-  }catch(e){
-    const st = stOf(sym);
-    aiBySym.set(sym, {
-      symbol: sym,
-      bias: "NEUTRAL",
-      confidence: 0,
-      pattern: "chop",
-      eta_minutes: {min:0,max:0,logic:"Gemini 呼叫失敗"},
-      trigger:{price:st.lastP||0,logic:"-"},
-      entry:{type:"market",price:st.lastP||0,logic:"Gemini error"},
-      stop:{price:st.lastP||0,logic:"-"},
-      takeProfit:[],
-      invalidation:"-",
-      notes:[String(e.message || e)]
-    });
-    render();
+  if(candidates.length === 0){
+    setGeminiStatus("Auto：尚未達「續力」或 cooldown");
+    return;
   }
+
+  // 批次：一次打 Top candidates（最多 3）
+  setGeminiStatus(`Auto：分析 ${candidates.map(x=>x.symbol).join(",")}`);
+  const prompt = buildGeminiPromptForTop(candidates);
+  const res = await geminiCall({ prompt, schema: geminiTradeArraySchema(), maxOut: CFG.GEMINI_MAX_OUT });
+
+  if(!res.ok){
+    setGeminiStatus(`Auto 失敗：${res.err}`);
+    return;
+  }
+
+  // 寫入 cache（逐一對應）
+  const arr = Array.isArray(res.data) ? res.data : [];
+  for(const ai of arr){
+    if(!ai?.symbol) continue;
+    S.aiCache.set(ai.symbol, { ts: now(), data: ai, raw: res.raw });
+  }
+  setGeminiStatus(`Auto：完成（${arr.map(x=>x.symbol).join(",")}）`);
 }
 
-async function analyzeTop(){
-  const pick = displayList.slice(0, CFG.GEMINI.TOPK).map(x=>x.sym);
-  for (const sym of pick){
-    await analyzeOne(sym);
+/** =========================
+ *  15) 手動：分析單一幣
+ * ========================= */
+window.analyzeOne = async function(symbol){
+  const st = S.sym.get(symbol);
+  if(!st){
+    alert("找不到該幣資料");
+    return;
   }
-}
-
-/* ===================== UI BINDINGS ===================== */
-document.getElementById('saveKeyBtn').onclick = saveGeminiKey;
-document.getElementById('clearKeyBtn').onclick = clearGeminiKey;
-document.getElementById('resetBtn').onclick = () => location.reload();
-document.getElementById('analyzeBtn').onclick = analyzeTop;
-
-document.getElementById('testGeminiBtn').onclick = async () => {
-  try{
-    const key = getGeminiKey();
-    if(!key) return alert("先貼上 Gemini key 再測試（可按 Save）");
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.GEMINI.MODEL}:generateContent`;
-    const res = await fetch(url,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        contents:[{role:"user",parts:[{text:`只回傳JSON：{"ok":true,"ts":${nowMs()}}`}]}],
-        generationConfig:{ temperature:0.1, max_output_tokens: 80, response_mime_type:"application/json" }
-      })
-    });
-
-    const t = await res.text();
-    console.log("Gemini test raw:", t);
-
-    if(!res.ok) return alert(`Gemini FAIL: HTTP ${res.status}（看 Console）`);
-    alert("Gemini OK ✅（看 Console 可確認回應）");
-  }catch(e){
-    alert("Gemini error: " + e.message);
+  if(!getGeminiKey()){
+    alert("請先輸入 Gemini API Key（不要 commit 到 GitHub）");
+    return;
   }
+  if(now() < S.geminiBackoffUntil){
+    alert("Gemini 目前 backoff 中，稍後再試");
+    return;
+  }
+
+  setGeminiStatus(`手動分析：${symbol}`);
+  const prompt = buildGeminiPromptForOne(st);
+  const res = await geminiCall({ prompt, schema: geminiTradeSchema(), maxOut: CFG.GEMINI_MAX_OUT });
+  if(!res.ok){
+    // 把 raw 存起來，方便你看
+    S.aiCache.set(symbol, { ts: now(), data: null, raw: res.raw || res.err });
+    setGeminiStatus(`手動失敗：${res.err}`);
+    alert(`Gemini FAIL：${res.err}\n（已把 raw 放進該幣卡片右側 raw 除錯）`);
+    return;
+  }
+  S.aiCache.set(symbol, { ts: now(), data: res.data, raw: res.raw });
+  setGeminiStatus(`手動完成：${symbol}`);
 };
 
-// init key
-(function initKey(){
-  const k = localStorage.getItem('GEMINI_API_KEY') || "";
-  if (k) document.getElementById('geminiKey').value = k;
-})();
-
-/* ===================== BOOT ===================== */
-(async function main(){
-  try{
-    await loadUniverse();
-  }catch(e){
-    document.getElementById('status').innerText = `status: exchangeInfo 失敗: ${e.message}`;
+/** =========================
+ *  16) Test Gemini（修正：用 test schema）
+ * ========================= */
+async function testGemini(){
+  if(!getGeminiKey()){
+    alert("請先輸入 Gemini API Key");
     return;
   }
+  setGeminiStatus("Test：送出…");
+  const prompt = [
+    `請輸出單一 JSON，符合 schema：`,
+    `- ok: boolean`,
+    `- msg: string（回傳 "hello"）`,
+  ].join("\n");
 
-  connectMark();
+  const res = await geminiCall({ prompt, schema: geminiTestSchema(), maxOut: 64 });
+  if(!res.ok){
+    setGeminiStatus(`Test 失敗：${res.err}`);
+    alert(`Test Gemini FAIL：${res.err}\n（看 Console 或 backoff）`);
+    return;
+  }
+  setGeminiStatus(`Test OK：${res.data?.msg || "ok"}`);
+  alert(`Test OK：${JSON.stringify(res.data)}`);
+}
 
-  // sample every second
-  setInterval(sampleMetrics, 1000);
+/** =========================
+ *  17) Key UI（修正：輸入/保存狀態要有反應）
+ * ========================= */
+function loadKey(){
+  const k = localStorage.getItem("TRIDENT_GEMINI_KEY") || "";
+  S.geminiKey = k;
+  $("keyInput").value = k;
+  $("keyStatus").innerText = k ? `Key：已載入（長度 ${k.length}）` : "Key：未載入";
+}
+function saveKey(){
+  const k = ($("keyInput").value || "").trim();
+  S.geminiKey = k;
+  localStorage.setItem("TRIDENT_GEMINI_KEY", k);
+  $("keyStatus").innerText = k ? `Key：已保存（長度 ${k.length}）` : "Key：未載入";
+}
+function clearKey(){
+  S.geminiKey = "";
+  localStorage.removeItem("TRIDENT_GEMINI_KEY");
+  $("keyInput").value = "";
+  $("keyStatus").innerText = "Key：未載入";
+}
+function hookKeyUI(){
+  $("saveKeyBtn").onclick = ()=>saveKey();
+  $("clearKeyBtn").onclick = ()=>clearKey();
+  $("keyInput").addEventListener("input", ()=>{
+    const k = ($("keyInput").value||"").trim();
+    $("keyStatus").innerText = k ? `Key：未保存（長度 ${k.length}）` : "Key：未載入";
+  });
+  $("keyInput").addEventListener("keypress", (e)=>{
+    if(e.key==="Enter"){ saveKey(); }
+  });
+  $("toggleKeyBtn").onclick = ()=>{
+    const inp = $("keyInput");
+    inp.type = (inp.type==="password") ? "text" : "password";
+  };
+}
 
-  // pipeline every 15s
-  setInterval(() => { tickPipeline().catch(()=>{}); }, 15_000);
+/** =========================
+ *  18) 控制按鈕
+ * ========================= */
+$("testGeminiBtn").onclick = ()=>testGemini();
+$("analyzeTopBtn").onclick = ()=>autoAnalyzeLoop(); // 手動觸發一次 auto
+$("resetBtn").onclick = ()=>{
+  stopWS();
+  S.sym.clear();
+  S.universe=[];
+  S.top5=[];
+  S.leader={symbol:null,score:0,since:0};
+  S.aiCache.clear();
+  S.geminiBackoffUntil=0;
+  $("scanStatus").innerText="掃描：-";
+  setGeminiStatus("-");
+  initAll();
+};
 
-  // render every 1s
-  setInterval(render, 1000);
+/** =========================
+ *  19) 主迴圈
+ * ========================= */
+function tick(){
+  updateScores();
+  computeTop5();
+}
 
-  // auto Gemini: only when key exists & displayList ready
-  setInterval(() => {
-    const key = getGeminiKey();
-    if (!key) return;
-    if (displayList.length < 3) return;
+function initTimers(){
+  if(S.renderTimer) clearInterval(S.renderTimer);
+  if(S.autoTimer) clearInterval(S.autoTimer);
+  if(S.oiTimer) clearInterval(S.oiTimer);
 
-    const now = nowMs();
-    if (now - lastAutoGeminiAt < CFG.GEMINI.AUTO_INTERVAL_MS) return;
+  S.renderTimer = setInterval(()=>{ tick(); render(); }, CFG.RENDER_EVERY_MS);
 
-    // only rerun when top set changed OR locked changed
-    const topHash = hashStr(displayList.slice(0, CFG.GEMINI.TOPK).map(x=>x.sym).join('|') + '|' + (lockedSym||''));
-    if (topHash === lastTopHashGemini) return;
+  S.autoTimer = setInterval(()=>{ autoAnalyzeLoop(); }, 2000); // 每2秒看一次是否到2分鐘且符合續力
+  S.oiTimer = setInterval(()=>{ oiLoop(); }, CFG.OI_REFRESH_MS);
+}
 
-    lastAutoGeminiAt = now;
-    lastTopHashGemini = topHash;
+async function initAll(){
+  loadKey();
+  hookKeyUI();
+  await initUniverse();
+  startWS();
+  initTimers();
+}
 
-    analyzeTop();
-  }, CFG.GEMINI.AUTO_CHECK_MS);
-
-})();
+initAll();
 </script>
 </body>
 </html>

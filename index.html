@@ -2,167 +2,145 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>TRIDENT V6.5 - THE FINAL ONE</title>
+    <title>TRIDENT V6.5 - FINAL COMPLETE</title>
     <style>
-        :root { --bg: #050505; --card: #0f0f0f; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; --warn: #ff3e3e; }
-        body { background: var(--bg); color: var(--text); font-family: 'Inter', 'Orbitron', sans-serif; padding: 20px; overflow-x: hidden; }
-        .monitor-header { background: linear-gradient(180deg, #1a1a1a 0%, #050505 100%); padding: 25px; border-radius: 15px; border: 1px solid #333; text-align: center; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        #top-sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 25px; }
-        .sniper-card { background: var(--card); border: 2px solid #222; border-radius: 20px; padding: 25px; position: relative; transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .sniper-card:hover { border-color: var(--accent); box-shadow: 0 0 25px rgba(0,255,204,0.1); transform: translateY(-5px); }
-        .symbol-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .symbol-name { font-size: 2.2rem; font-weight: 900; letter-spacing: 1px; color: var(--accent); }
-        .funding-badge { font-family: monospace; font-size: 0.85rem; padding: 4px 10px; border-radius: 6px; border: 1px solid #444; background: #000; }
-        .alert-purple { background: var(--purple) !important; color: white !important; border-color: var(--purple) !important; font-weight: bold; box-shadow: 0 0 15px var(--purple); }
-        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 15px 0; }
-        .data-item { background: #1a1a1a; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #222; }
-        .label { font-size: 0.7rem; color: #666; text-transform: uppercase; margin-bottom: 5px; }
-        .value { font-size: 1.1rem; font-weight: bold; font-family: 'Consolas', monospace; }
-        .ai-terminal { background: #000; color: var(--accent); padding: 18px; border-radius: 12px; font-size: 0.9rem; line-height: 1.7; border-left: 4px solid var(--accent); font-family: 'Consolas', monospace; min-height: 110px; white-space: pre-wrap; margin-top: 15px; }
-        .status-bar { font-size: 0.75rem; color: #444; margin-top: 40px; text-align: center; letter-spacing: 2px; }
+        :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; --warn: #ff3e3e; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 20px; }
+        .header { background: linear-gradient(180deg, #1a1a1a 0%, #050505 100%); padding: 20px; border-radius: 12px; border: 1px solid #333; text-align: center; margin-bottom: 25px; }
+        #sniper-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+        .card { background: var(--card); border: 2px solid #222; border-radius: 18px; padding: 22px; transition: 0.3s; position: relative; }
+        .card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(0,255,204,0.1); }
+        .symbol-row { display: flex; justify-content: space-between; align-items: center; }
+        .symbol { font-size: 2.2rem; font-weight: 900; color: var(--accent); }
+        .funding { font-family: monospace; font-size: 0.8rem; padding: 4px 8px; border-radius: 5px; border: 1px solid #444; }
+        .alert-purple { background: var(--purple) !important; color: white !important; border-color: var(--purple) !important; font-weight: bold; box-shadow: 0 0 10px var(--purple); }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+        .item { background: #151515; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #222; }
+        .val { font-size: 1.1rem; font-weight: bold; font-family: monospace; }
+        .ai-box { background: #000; color: var(--accent); padding: 15px; border-radius: 10px; font-size: 0.9rem; line-height: 1.6; border-left: 4px solid var(--accent); min-height: 100px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
 
-    <div class="monitor-header">
-        <h1 style="margin:0; font-size: 2.5rem; letter-spacing: 5px;">🔱 TRIDENT <span style="color:var(--accent)">V6.5 FINAL</span></h1>
-        <div id="engine-status" style="color: #888; margin-top:10px;">ENGINE OFFLINE</div>
+    <div class="header">
+        <h1 style="margin:0; letter-spacing:4px;">🔱 TRIDENT <span style="color:var(--accent)">V6.5 FINAL</span></h1>
+        <div id="status" style="color:#666; font-size:0.8rem; margin-top:8px;">掃描引擎準備就緒 | 排除 BTC, ETH, SOL, XRP, BNB, BNX</div>
     </div>
 
-    <div id="top-sniper-deck">
-        <div style="text-align:center; width:100%; color:#555; padding: 50px;">正在執行全市場掃描，排除 BTC, ETH 等主流幣...</div>
-    </div>
-
-    <div class="status-bar" id="footer-info">SYSTEM READY | PUSHOVER ACTIVE</div>
+    <div id="sniper-deck"></div>
 
     <script>
-        // [2026-01-21] 注入用戶 Pushover 密鑰
+        // [2026-01-21] 用戶密鑰注入
         const PUSHOVER_USER = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
         const PUSHOVER_TOKEN = "acyoe3sz15x4n91r1349fdcau7x6pw";
         const GROQ_KEY = "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";
         
-        // [2026-01-12] 嚴格執行過濾名單
+        // [2026-01-12] 過濾黑名單
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
-        let marketPool = [];
+        let dataPool = [];
 
-        async function startEngine() {
+        async function engine() {
             try {
-                const resp = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo');
-                const data = await resp.json();
-                const symbols = data.symbols
+                const info = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo').then(r => r.json());
+                const list = info.symbols
                     .filter(s => s.quoteAsset === "USDT" && s.status === "TRADING" && !BLACKLIST.includes(s.symbol))
                     .map(s => s.symbol);
 
                 while(true) {
-                    const batchSize = 10;
-                    for (let i = 0; i < symbols.length; i += batchSize) {
-                        const batch = symbols.slice(i, i + batchSize);
-                        document.getElementById('engine-status').innerText = `正在雷達監控: ${i} / ${symbols.length}`;
-                        await Promise.all(batch.map(s => processSymbol(s)));
-                        renderUI();
-                        await new Promise(r => setTimeout(r, 600)); // 防止 429
+                    for (let i = 0; i < list.length; i += 12) {
+                        const batch = list.slice(i, i + 12);
+                        document.getElementById('status').innerText = `正在雷達掃描: ${i} / ${list.length}`;
+                        await Promise.all(batch.map(s => scan(s)));
+                        updateUI();
+                        await new Promise(r => setTimeout(r, 600)); 
                     }
                     await new Promise(r => setTimeout(r, 10000));
                 }
-            } catch (e) { document.getElementById('engine-status').innerText = "連線異常，檢查網路"; }
+            } catch (e) { console.error(e); }
         }
 
-        async function processSymbol(symbol) {
+        async function scan(s) {
             try {
-                // 使用暴力接口避開 404 [2026-02-09 修復]
-                const [pIndex, k5m, k1m, oiData] = await Promise.all([
-                    fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`).then(r => r.json()),
-                    fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=20`).then(r => r.json()),
-                    fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1m&limit=10`).then(r => r.json()),
-                    fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`).then(r => r.json())
+                // 使用暴力接口確保 OI 數據不報錯
+                const [pIndex, k5, k1, oi] = await Promise.all([
+                    fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${s}`).then(r => r.json()),
+                    fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=5m&limit=20`).then(r => r.json()),
+                    fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=1m&limit=10`).then(r => r.json()),
+                    fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${s}`).then(r => r.json())
                 ]);
 
                 const funding = parseFloat(pIndex.lastFundingRate) * 100;
-                const currentOI = parseFloat(oiData.openInterest);
-                const currentVol = parseFloat(k5m[19][5]);
-                const avgVol = k5m.reduce((a, b) => a + parseFloat(b[5]), 0) / 20;
-                const volRatio = currentVol / avgVol;
-                
-                // 1M 加速度斜率
-                const p1m = k1m.map(k => parseFloat(k[4]));
-                const slope = (p1m[9] - p1m[0]) / p1m[0] * 100;
+                const curOI = parseFloat(oi.openInterest);
+                const curVol = parseFloat(k5[19][5]);
+                const avgVol = k5.reduce((a, b) => a + parseFloat(b[5]), 0) / 20;
+                const volRatio = curVol / avgVol;
+                const slope = (parseFloat(k1[9][4]) - parseFloat(k1[0][4])) / parseFloat(k1[0][4]) * 100;
 
-                // 核心評分：OI權重 + 量縮(volRatio越小分數越高) + 資費情緒
+                // 綜合評分：量縮加成 + 資費絕對值權重
                 const score = (1 - volRatio) * 15 + Math.abs(funding) * 50 + (slope > 0 ? 5 : 0);
                 
-                const entry = { symbol, funding, currentOI, volRatio, price: pIndex.markPrice, slope, score, k5m };
-                const idx = marketPool.findIndex(m => m.symbol === symbol);
-                if(idx > -1) marketPool[idx] = entry; else marketPool.push(entry);
+                const entry = { s, funding, curOI, volRatio, price: pIndex.markPrice, slope, score, klines: k5 };
+                const idx = dataPool.findIndex(d => d.s === s);
+                if(idx > -1) dataPool[idx] = entry; else dataPool.push(entry);
             } catch (e) {}
         }
 
-        function renderUI() {
-            const top3 = [...marketPool].sort((a, b) => b.score - a.score).slice(0, 3);
-            const deck = document.getElementById('top-sniper-deck');
+        function updateUI() {
+            const top3 = [...dataPool].sort((a, b) => b.score - a.score).slice(0, 3);
+            const deck = document.getElementById('sniper-deck');
             if(top3.length === 0) return;
             deck.innerHTML = "";
 
             top3.forEach(item => {
-                // [2026-01-11] 資費 0.05% 紫色警戒
-                const isFundingAlert = Math.abs(item.funding) >= 0.05;
+                // [2026-01-11] 資費正負 0.05% 紫色警戒
+                const isAlert = Math.abs(item.funding) >= 0.05;
                 const card = document.createElement('div');
-                card.className = 'sniper-card';
+                card.className = 'card';
                 card.innerHTML = `
-                    <div class="symbol-header">
-                        <span class="symbol-name">${item.symbol}</span>
-                        <span class="funding-badge ${isFundingAlert ? 'alert-purple' : ''}">
-                            FUNDING: ${item.funding.toFixed(4)}%
-                        </span>
+                    <div class="symbol-row">
+                        <span class="symbol">${item.s}</span>
+                        <span class="funding ${isAlert ? 'alert-purple' : ''}">FUNDING: ${item.funding.toFixed(4)}%</span>
                     </div>
-                    <div class="data-grid">
-                        <div class="data-item"><div class="label">量縮度 (窒息感)</div><div class="value" style="color:${item.volRatio < 0.6 ? 'var(--warn)' : '#fff'}">${(item.volRatio*100).toFixed(0)}%</div></div>
-                        <div class="data-item"><div class="label">1M 斜率 (加速度)</div><div class="value" style="color:var(--accent)">${item.slope.toFixed(3)}%</div></div>
-                        <div class="data-item"><div class="label">當前 OI (持倉)</div><div class="value">${(item.currentOI / 1000000).toFixed(2)}M</div></div>
-                        <div class="data-item"><div class="label">標記價格</div><div class="value">$${parseFloat(item.price)}</div></div>
+                    <div class="grid">
+                        <div class="item"><div style="font-size:0.7rem;color:#666">量縮窒息度</div><div class="val" style="color:${item.volRatio < 0.6 ? 'var(--warn)' : '#fff'}">${(item.volRatio*100).toFixed(0)}%</div></div>
+                        <div class="item"><div style="font-size:0.7rem;color:#666">1M 加速度</div><div class="val" style="color:var(--accent)">${item.slope.toFixed(3)}%</div></div>
+                        <div class="item"><div style="font-size:0.7rem;color:#666">實時 OI (持倉)</div><div class="val">${(item.curOI / 1000000).toFixed(2)}M</div></div>
+                        <div class="item"><div style="font-size:0.7rem;color:#666">標記價格</div><div class="val">$${parseFloat(item.price)}</div></div>
                     </div>
-                    <div class="ai-terminal" id="ai-${item.symbol}">>> [AI 終端] 正在解析變盤指紋...</div>
+                    <div class="ai-box" id="ai-${item.s}">> AI 正在接入全數據診斷中...</div>
                 `;
                 deck.appendChild(card);
-                askDeepAI(item);
+                askAI(item);
             });
         }
 
-        async function askDeepAI(item) {
+        async function askAI(item) {
             try {
-                const prompt = `你是加密狙擊手。分析 ${item.symbol}：OI ${item.currentOI}, 量縮 ${(item.volRatio*100).toFixed(0)}%, 資費 ${item.funding.toFixed(4)}% (警戒0.05%), 1M斜率 ${item.slope.toFixed(4)}%。
-                價格序列: ${JSON.stringify(item.k5m.map(k=>k[4]))}。
-                任務：1.識別型態 2.主力意圖 3.表態方向 4.噴發倒數(分鐘) 5.勝率。
-                格式：>> [型態診斷] >> [主力意圖] >> [變盤倒數] X 分鐘 >> [方向勝率] >> [目標位]。繁體中文，冷酷黑客風。`;
+                // 加入延遲避免 Groq 429 報錯
+                await new Promise(r => setTimeout(r, 1500)); 
+                const prompt = `你是冷酷狙擊手。分析 ${item.s}：OI ${item.curOI}, 量縮 ${(item.volRatio*100).toFixed(0)}%, 資費 ${item.funding.toFixed(4)}% (0.05%警戒), 1M斜率 ${item.slope.toFixed(4)}%。價格:${JSON.stringify(item.klines.map(k=>k[4]))}。
+                結論：1.型態 2.主力意圖 3.表態方向 4.幾分鐘內噴發 5.勝率。繁體中文。`;
 
                 const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        model: "llama3-70b-8192", 
-                        messages: [{role: "system", content: "你是一個冷酷、專業的 AI 交易終端。"}, {role: "user", content: prompt}], 
-                        temperature: 0.1 
-                    })
+                    body: JSON.stringify({ model: "llama3-70b-8192", messages: [{role: "system", content: "你是一個專業的 AI 交易終端。"}, {role: "user", content: prompt}], temperature: 0.1 })
                 });
                 const d = await resp.json();
-                const content = d.choices[0].message.content;
-                document.getElementById(`ai-${item.symbol}`).innerText = content;
+                const result = d.choices[0].message.content;
+                document.getElementById(`ai-${item.s}`).innerText = ">> " + result;
 
-                // 如果勝率 > 90% 自動發送 Pushover
-                if(content.includes("90%") || content.includes("95%")) {
-                    sendPushover(item.symbol, content);
+                if(result.includes("90%") || result.includes("95%")) {
+                    fetch("https://api.pushover.net/1/messages.json", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 高勝率噴發機會: ${item.s}\n${result}&title=🔱 TRIDENT ALERT`
+                    });
                 }
-            } catch (e) {}
+            } catch (e) { document.getElementById(`ai-${item.s}`).innerText = ">> AI 診斷隊列中..."; }
         }
 
-        async function sendPushover(symbol, msg) {
-            fetch("https://api.pushover.net/1/messages.json", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=🎯 TRIDENT 發現高勝率機會: ${symbol}\n${msg}&title=🔱 TRIDENT SNIPER ALERT`
-            });
-        }
-
-        startEngine();
+        engine();
     </script>
 </body>
 </html>

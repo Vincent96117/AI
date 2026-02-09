@@ -2,1298 +2,1284 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>⚡ TRIDENT V7 — Anomaly → Top5 → Groq AI (Long-only)</title>
-
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TRIDENT V7 - Top20 → AI選Top5（LONG ONLY）</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
     body { background:#050505; color:#d4d4d8; font-family:'JetBrains Mono', monospace; overflow-x:hidden; }
-    .panel { background:#0b0b0d; border:1px solid #1f1f23; border-radius:14px; }
-    .card { background:#0f0f11; border:1px solid #1f1f23; border-radius:14px; }
-    .card-strong { border:2px solid #22c55e !important; box-shadow: 0 0 18px rgba(34,197,94,0.18); }
-    .muted { color:#8b8b93; }
-    .kv { background:#0b0b0d; border:1px solid #1f1f23; border-radius:10px; padding:10px; }
-    .btn { border:1px solid #2a2a2f; background:#101014; border-radius:10px; padding:8px 10px; font-weight:800; font-size:12px; }
-    .btn:hover { filter:brightness(1.12); }
-    .btn-blue { background:#0b3a78; border-color:#2e7df0; color:#e8f1ff; }
-    .btn-green { background:#0b5a3c; border-color:#22c55e; color:#eafff4; }
-    .btn-amber { background:#6a3d00; border-color:#f59e0b; color:#fff7e6; }
-    .btn-red { background:#5a0b0b; border-color:#ef4444; color:#ffecec; }
-
-    .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; font-size:11px; font-weight:900; border:1px solid #2a2a2f; }
-    .b-setup { background:rgba(245,158,11,0.12); border-color:rgba(245,158,11,0.35); color:#ffd18a;}
-    .b-ignite{ background:rgba(249,115,22,0.12); border-color:rgba(249,115,22,0.35); color:#ffbc8a;}
-    .b-confirm{ background:rgba(34,197,94,0.12); border-color:rgba(34,197,94,0.35); color:#b7ffd3;}
-    .b-risk { background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.35); color:#ffb7b7;}
-    .b-warm { background:rgba(148,163,184,0.10); border-color:rgba(148,163,184,0.25); color:#d7e1f0;}
-
-    .hb { width:10px; height:10px; border-radius:50%; display:inline-block; }
-    .hb-on { background:#22c55e; box-shadow:0 0 12px #22c55e; }
-    .hb-off { background:#6b7280; }
-    .hb-ai { background:#60a5fa; box-shadow:0 0 12px rgba(96,165,250,0.7); }
-
-    .grid-m { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; }
-    @media (max-width: 1100px){ .grid-m{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 760px){ .grid-m{ grid-template-columns: repeat(1, minmax(0, 1fr)); } }
-
-    .ai-box { background:#09090b; border:1px solid #1f1f23; border-radius:12px; padding:12px; min-height:220px; }
-    .ai-title { font-weight:1000; color:#fff; }
-    .ai-line { font-size:12px; line-height:1.5; margin-top:6px; }
-    .ai-warn { color:#ffb7b7; font-weight:900; }
-    .ai-ok { color:#b7ffd3; font-weight:900; }
-
-    .chart-box { height:0; opacity:0; overflow:hidden; transition:all .25s ease; border-top:0px solid transparent; }
-    .chart-box.active { height:300px; opacity:1; border-top:1px solid #2a2a2f; margin-top:10px; }
+    .panel { background:#0f0f11; border:1px solid #1f1f23; }
+    .muted { color:#71717a; }
+    .badge { border:1px solid #27272a; background:#0b0b0d; }
+    .ok { color:#22c55e; }
+    .warn { color:#f59e0b; }
+    .bad { color:#ef4444; }
+    .mono { font-family:'JetBrains Mono', monospace; }
+    .card { background:#0f0f11; border:1px solid #1f1f23; border-radius:14px; overflow:hidden; }
+    .card-top1 { border:2px solid #22c55e !important; box-shadow:0 0 0 1px rgba(34,197,94,0.2), 0 0 24px rgba(34,197,94,0.15); }
+    .kv { background:#0b0b0d; border:1px solid #1f1f23; border-radius:10px; padding:8px 10px; }
+    .btn { border:1px solid #27272a; background:#0b0b0d; border-radius:10px; padding:8px 10px; font-weight:700; }
+    .btn:hover { filter:brightness(1.1); }
+    .btn-blue { border-color:#2563eb; color:#93c5fd; background:rgba(37,99,235,0.12); }
+    .btn-green { border-color:#16a34a; color:#86efac; background:rgba(22,163,74,0.12); }
+    .btn-amber { border-color:#d97706; color:#fdba74; background:rgba(217,119,6,0.12); }
+    .btn-red { border-color:#ef4444; color:#fecaca; background:rgba(239,68,68,0.12); }
+    .hr { border-top:1px solid #1f1f23; }
+    .ai-box { background:#070708; border:1px solid #1f1f23; border-radius:14px; padding:12px; min-height:190px; }
+    .stage-setup { color:#fbbf24; }
+    .stage-ignite { color:#fb7185; }
+    .stage-confirm { color:#22c55e; }
+    .stage-chase { color:#ef4444; }
+    .stage-cool { color:#71717a; }
+    .tiny { font-size:11px; }
+    .tiny2 { font-size:10px; }
+    input[type="text"], input[type="password"] {
+      background:#09090b; border:1px solid #27272a; border-radius:10px; padding:10px 10px; color:#e5e7eb;
+      outline:none; font-size:12px;
+    }
+    input::placeholder { color:#52525b; }
+    .heartbeat { width:8px; height:8px; border-radius:999px; display:inline-block; margin-right:8px; background:#3f3f46; box-shadow:none; }
+    .hb-on { background:#22c55e; box-shadow:0 0 10px rgba(34,197,94,0.75); }
   </style>
 </head>
 
-<body class="p-4 h-screen flex flex-col gap-3">
-
+<body class="p-4">
   <!-- Top Bar -->
-  <div class="panel p-3 flex flex-col gap-3">
-    <div class="flex items-start justify-between gap-3 flex-wrap">
-      <div class="flex items-center gap-3">
-        <span id="hb" class="hb hb-off"></span>
-        <div>
-          <div class="text-white text-xl font-black italic leading-none">
-            TRIDENT <span class="text-emerald-400">V7</span>
-          </div>
-          <div class="text-[10px] muted font-bold tracking-widest uppercase">
-            Long-only • Anomaly-first • Top5 stabilized • Groq AI
-          </div>
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div class="flex items-center gap-3">
+      <span id="hb" class="heartbeat"></span>
+      <div>
+        <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7</span></div>
+        <div class="tiny muted font-bold tracking-widest uppercase">
+          Top20 anomalies → AI pick Top5 (LONG ONLY)
         </div>
-      </div>
-
-      <div class="flex items-center gap-2 flex-wrap">
-        <input id="apiKey" type="password" placeholder="輸入 Groq API Key（只存在你瀏覽器）"
-               class="bg-zinc-900 border border-zinc-700 text-[12px] px-3 py-2 rounded text-white outline-none w-[320px] max-w-full" />
-        <button class="btn btn-green" id="btnSaveKey">Save</button>
-        <button class="btn" id="btnClearKey">Clear</button>
-
-        <select id="modelSel" class="bg-zinc-900 border border-zinc-700 text-[12px] px-2 py-2 rounded text-white outline-none">
-          <option value="openai/gpt-oss-20b">openai/gpt-oss-20b（JSON schema 嚴格）</option>
-          <option value="openai/gpt-oss-120b">openai/gpt-oss-120b（JSON schema 嚴格）</option>
-          <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile（JSON object）</option>
-        </select>
-
-        <button class="btn btn-green" id="btnTestAI">Test AI</button>
-        <button class="btn btn-blue" id="btnAnalyzeTop">Analyze Top（AI）</button>
-
-        <label class="text-[12px] font-black flex items-center gap-2 select-none">
-          <input id="autoAI" type="checkbox" class="scale-110" checked />
-          AutoAI(2m)
-        </label>
-
-        <button class="btn btn-red" id="btnReset">RESET</button>
       </div>
     </div>
 
-    <div class="flex items-center justify-between gap-2 flex-wrap">
-      <div class="text-[12px]">
-        <span class="muted">狀態：</span>
-        <span id="statusTxt" class="font-black">初始化…</span>
-        <span class="muted">｜Universe：</span><span id="uCnt" class="font-black">0</span>
-        <span class="muted">｜Deep：</span><span id="dCnt" class="font-black">0</span>
-        <span class="muted">｜Top5：</span><span id="tCnt" class="font-black">0</span>
-        <span class="muted">｜Champion：</span><span id="champTxt" class="font-black">-</span>
-      </div>
-      <div class="text-[11px] muted">
-        權重（Long-only）：波動0.22｜OI0.25｜主動買入0.28｜量能0.15｜形態0.10｜追價懲罰（動態）
-      </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <input id="aiKey" type="password" class="w-[280px]" placeholder="輸入 Groq API Key（只存在瀏覽器 localStorage）" />
+      <button class="btn btn-green" onclick="saveKey()">Save</button>
+      <button class="btn" onclick="clearKey()">Clear</button>
+
+      <select id="modelSel" class="btn">
+        <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+        <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
+      </select>
+
+      <button class="btn btn-green" onclick="testAI()">Test AI</button>
+      <button class="btn btn-blue" onclick="runAIOnce(true)">Analyze Now</button>
+      <button class="btn btn-amber" onclick="toggleAutoAI()"><span id="autoLbl">Auto AI: ON</span></button>
+      <button class="btn btn-red" onclick="hardReset()">RESET</button>
     </div>
   </div>
 
-  <!-- Top5 Container -->
-  <div class="panel p-3 flex-1 overflow-y-auto">
-    <div class="flex items-center justify-between mb-2">
-      <div class="text-white font-black text-lg">Top 5 候選（最強鎖定置頂）</div>
-      <div class="text-[12px] muted">更新：<span id="updTime">-</span></div>
+  <!-- Status line -->
+  <div class="mt-3 panel rounded-xl p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div class="flex flex-wrap items-center gap-3 tiny">
+      <span class="badge px-2 py-1 rounded-lg">Universe: <b id="universeN">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">Candidates(Top20): <b id="candN">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">Top5: <b id="top5N">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">Pinned #1: <b id="pinnedSym">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">更新: <b id="lastTick">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">Binance: <b id="binStatus" class="muted">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">AI: <b id="aiStatus" class="muted">-</b></span>
     </div>
-    <div id="cards" class="flex flex-col gap-3"></div>
+
+    <div class="tiny muted">
+      規則：前端先篩 Top20（波動/量能/OI/主動買差額/反追價）→ AI 從 Top20 選 Top5 並給進出場/停損/止盈/ETA（只做多）
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div class="mt-4 grid grid-cols-1 gap-4">
+    <div class="panel rounded-xl p-3">
+      <div class="flex items-center justify-between">
+        <div class="text-white font-bold">Top 5（AI 從 Top20 選出）</div>
+        <button class="btn tiny" onclick="toggleDebug()">查看 AI 吃到的 Top20 摘要（Debug）</button>
+      </div>
+      <div id="cards" class="mt-3 grid grid-cols-1 gap-4"></div>
+    </div>
+
+    <div id="debugWrap" class="panel rounded-xl p-3 hidden">
+      <div class="text-white font-bold mb-2">AI Input（Top20 摘要 JSON）</div>
+      <pre id="debugJSON" class="ai-box text-[11px] overflow-auto"></pre>
+    </div>
   </div>
 
 <script>
-/* =========================
+/* ===========================
    CONFIG
-========================= */
+=========================== */
+const CONFIG = {
+  LONG_ONLY: true,
 
-const BINANCE_REST = "https://fapi.binance.com";
-const BINANCE_WS_BASE = "wss://fstream.binance.com/ws";
+  // Universe: 每隔一段時間用 24hr quoteVolume 抓一批「可交易」池
+  UNIVERSE_LIMIT: 80,         // 追求品質/不太吃資源：80~120 都行
+  UNIVERSE_REFRESH_MS: 5 * 60 * 1000,
 
-const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+  // 前端只輸出 Top20「有料候選」給 AI
+  CANDIDATE_LIMIT: 20,
+  CANDIDATE_REFRESH_MS: 8000,
 
-// 你要排除「市值前 25」：前端無法可靠即時抓市值排行，所以這裡用可編輯靜態清單。
-// 你覺得少/多，自己加減（要 100% 跟市值排行一致，就必須串 CoinGecko/CMC）。
-const EXCLUDE_TOP_MCAP_25 = new Set([
-  "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","AVAXUSDT","LINKUSDT",
-  "DOTUSDT","MATICUSDT","POLUSDT","LTCUSDT","BCHUSDT","ATOMUSDT","XLMUSDT","SHIBUSDT","UNIUSDT","ETCUSDT",
-  "ICPUSDT","FILUSDT","APTUSDT","ARBUSDT","OPUSDT"
-]);
+  // AI 從 Top20 挑 Top5（前端只畫 Top5）
+  TOP5_LIMIT: 5,
+  AI_INTERVAL_MS: 2 * 60 * 1000,
 
-// 其它排除：你不想看的或太特殊的
-const EXCLUDE_EXTRA = new Set([
-  "BTCUSDT","ETHUSDT","BNXUSDT"
-]);
+  // 計算用
+  ROLL_5M_MS: 5 * 60 * 1000,
+  BUCKET_5M_MS: 5 * 60 * 1000,
+  HIST_5M_BUCKETS: 48,        // 4 小時 = 48 個 5m bucket
+  KLINES_LIMIT: 60,           // 1m * 60
+  ATR_PERIOD: 14,
+  SWING_WINDOW: 20,
 
-const MIN_QUOTE_VOL_24H = 8_000_000;     // 過濾死魚（24h quoteVolume）
-const UNIVERSE_SIZE = 80;                // 先從 24h 量能挑出前 N 個（再排除 topcap）
-const DEEP_SIZE = 30;                    // 深度抓資料的數量（避免 API 打爆）
-const TOP_SIZE = 5;
+  // 反追價 (anti-chase) 閾值（你之後要調整就改這裡）
+  ANTI_CHASE: {
+    ret5mPctMax: 1.2,          // 5m 漲幅太高不追
+    distSmaAtrMax: 1.2,        // 離 SMA20 超過 1.2 ATR 視為追價風險
+    range20PctMax: 3.2         // 近 20 根震幅太大，追價風險
+  },
 
-const DEEP_REFRESH_MS = 20_000;          // 深度輪詢
-const FAST_REFRESH_MS = 30_000;          // 24h ticker 更新
-const TOP_WS_ROLLING_MS = 5 * 60 * 1000; // WS 計算 5 分鐘 rolling
-const AUTO_AI_COOLDOWN_MS = 120_000;     // Auto AI 最小間隔 2 分鐘
-const AI_MAX_TOKENS = 420;               // 控制輸出長度（Groq 用 max_completion_tokens）:contentReference[oaicite:1]{index=1}
+  // 只挑「有料」：基本門檻（你之後要調整就改這裡）
+  THRESH: {
+    volZMin: 1.4,              // 量能異常
+    deltaNotionalMin: 20000,   // 主動買差額(5m) 最少金額（USDT notional）
+    imbalanceMin: 0.08,        // 主動買入比例門檻
+    preScoreMin: 55
+  },
 
-const HYSTERESIS_RATIO = 1.10;           // 新王至少比舊王強 10% 才換（避免榜一直跳）
+  // 不要市值前 25（靜態排除清單；你可以自行增減）
+  // ⚠️ 這不是即時市值 API，是你要求「前端完成」的最佳折衷：用常見 Top cap 做排除
+  TOPCAP_EXCLUDE: [
+    "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","TONUSDT",
+    "AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","POLUSDT","SHIBUSDT","1000SHIBUSDT",
+    "LTCUSDT","BCHUSDT","ATOMUSDT","UNIUSDT","XLMUSDT","ICPUSDT","FILUSDT","APTUSDT",
+    "NEARUSDT","ARBUSDT","OPUSDT"
+  ],
 
-/* =========================
-   STATE
-========================= */
-
-const S = {
-  apiKey: "",
-  model: "openai/gpt-oss-20b",
-  autoAI: true,
-
-  lastFastAt: 0,
-  lastDeepAt: 0,
-  lastAutoAiAt: 0,
-  backoffUntil: 0,
-
-  universe: [],
-  deepList: [],
-
-  // symbol -> object
-  data: new Map(),
-
-  // Top5 + champion lock
-  top: [],
-  champion: { symbol: null, score: -Infinity },
-
-  // WS per symbol (top5 only)
-  ws: new Map(),
+  // 你原本排除 + 其他常見（可自行調整）
+  EXCLUDE_EXTRA: [
+    "USDCUSDT","TUSDUSDT","FDUSDUSDT","USDPUSDT","DAIUSDT",
+    "BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","BNXUSDT"
+  ]
 };
 
-function nowTs(){ return Date.now(); }
-function fmtTime(ts){
-  const d = new Date(ts);
-  return d.toLocaleTimeString('zh-TW', { hour12:false });
+/* ===========================
+   STATE
+=========================== */
+let AUTO_AI = true;
+let lastAiTs = 0;
+let aiBackoffUntil = 0;
+
+let universe = [];              // symbols in current universe
+let symState = {};              // per symbol state
+let wsAgg = {};                 // per symbol aggTrade websocket
+let wsMini = null;              // global miniTicker
+
+let premiumMap = {};            // funding/premium info map (all symbols)
+let candidatesTop20 = [];       // array of symbol strings
+let aiTop5 = [];                // array of picks from AI
+let aiBySymbol = {};            // symbol -> aiPick
+let pinnedTop1 = { symbol:null, score:-1, confidence:-1, ts:0 };
+
+/* ===========================
+   UI helpers
+=========================== */
+const $ = (id) => document.getElementById(id);
+function nowStr() {
+  const d = new Date();
+  return d.toLocaleTimeString("zh-TW", { hour12:false });
+}
+function fmt(n, digits=2) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "-";
+  return Number(n).toFixed(digits);
+}
+function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+
+function setStatus(el, text, cls) {
+  const node = $(el);
+  node.textContent = text;
+  node.className = cls || "muted";
 }
 
-function setHB(mode){
-  const hb = document.getElementById("hb");
-  hb.classList.remove("hb-on","hb-off","hb-ai");
-  if(mode==="on") hb.classList.add("hb-on");
-  else if(mode==="ai") hb.classList.add("hb-ai");
-  else hb.classList.add("hb-off");
+function toggleDebug() {
+  $("debugWrap").classList.toggle("hidden");
 }
 
-function setStatus(t){
-  document.getElementById("statusTxt").innerText = t;
+function saveKey() {
+  const k = $("aiKey").value.trim();
+  if (!k) return alert("請輸入 Groq API Key");
+  localStorage.setItem("GROQ_KEY", k);
+  alert("已保存到 localStorage（僅此瀏覽器）");
+}
+function clearKey() {
+  localStorage.removeItem("GROQ_KEY");
+  $("aiKey").value = "";
+  alert("已清除 key");
+}
+function loadKey() {
+  const k = localStorage.getItem("GROQ_KEY") || "";
+  $("aiKey").value = k;
+}
+function toggleAutoAI() {
+  AUTO_AI = !AUTO_AI;
+  $("autoLbl").textContent = `Auto AI: ${AUTO_AI ? "ON" : "OFF"}`;
+}
+function hardReset() {
+  // 關閉 ws
+  try { if (wsMini) wsMini.close(); } catch {}
+  Object.keys(wsAgg).forEach(s => { try { wsAgg[s].close(); } catch {} });
+  wsAgg = {};
+  symState = {};
+  universe = [];
+  candidatesTop20 = [];
+  aiTop5 = [];
+  aiBySymbol = {};
+  pinnedTop1 = { symbol:null, score:-1, confidence:-1, ts:0 };
+  lastAiTs = 0;
+  aiBackoffUntil = 0;
+
+  $("cards").innerHTML = "";
+  $("debugJSON").textContent = "";
+  setStatus("binStatus","重置中…","warn");
+  setStatus("aiStatus","-","muted");
+  $("universeN").textContent = "-";
+  $("candN").textContent = "-";
+  $("top5N").textContent = "-";
+  $("pinnedSym").textContent = "-";
+
+  boot();
 }
 
-function updateHeaderCounts(){
-  document.getElementById("uCnt").innerText = S.universe.length;
-  document.getElementById("dCnt").innerText = S.deepList.length;
-  document.getElementById("tCnt").innerText = S.top.length;
-  document.getElementById("champTxt").innerText = S.champion.symbol ? `${S.champion.symbol} (${S.champion.score.toFixed(2)})` : "-";
+/* ===========================
+   Network helpers
+=========================== */
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  const txt = await res.text();
+  let data;
+  try { data = JSON.parse(txt); } catch { throw new Error(`JSON parse fail: ${txt.slice(0,200)}`); }
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${txt.slice(0,200)}`);
+  return data;
 }
 
-/* =========================
-   SAFE FETCH
-========================= */
+function zscore(x, arr) {
+  if (!arr || arr.length < 8) return null;
+  const m = arr.reduce((a,b)=>a+b,0) / arr.length;
+  const v = arr.reduce((a,b)=>a+(b-m)*(b-m),0) / arr.length;
+  const s = Math.sqrt(v);
+  if (s === 0) return 0;
+  return (x - m) / s;
+}
 
-async function fetchJson(url, opts = {}, timeoutMs = 10_000){
-  const ctrl = new AbortController();
-  const t = setTimeout(()=>ctrl.abort(), timeoutMs);
-  try{
-    const res = await fetch(url, { ...opts, signal: ctrl.signal });
-    const txt = await res.text();
-    let js = null;
-    try { js = txt ? JSON.parse(txt) : null; } catch(e){}
-    if(!res.ok){
-      const err = new Error(`HTTP ${res.status}`);
-      err.status = res.status;
-      err.body = js ?? txt;
-      throw err;
+/* ===========================
+   Binance data: universe + premium
+=========================== */
+async function refreshPremiumAll() {
+  // premiumIndex 不帶 symbol 會回全部
+  const data = await fetchJSON("https://fapi.binance.com/fapi/v1/premiumIndex");
+  const map = {};
+  for (const r of data) {
+    // r: {symbol, markPrice, indexPrice, lastFundingRate, ...}
+    const mark = parseFloat(r.markPrice);
+    const idx = parseFloat(r.indexPrice);
+    const premiumPct = (idx && mark) ? ((mark - idx) / idx * 100) : null;
+    map[r.symbol] = {
+      fundingPct: parseFloat(r.lastFundingRate) * 100,
+      premiumPct,
+      markPrice: mark,
+      indexPrice: idx
+    };
+  }
+  premiumMap = map;
+}
+
+async function refreshUniverse() {
+  // 24hr tickers: 全量，取 quoteVolume 前 N 作為 universe（但最終「有料」還是靠異常分數）
+  const tickers = await fetchJSON("https://fapi.binance.com/fapi/v1/ticker/24hr");
+  const ex = new Set([...CONFIG.TOPCAP_EXCLUDE, ...CONFIG.EXCLUDE_EXTRA]);
+
+  // 只取 USDT 永續
+  // 這裡用簡化：symbol endsWith USDT
+  const filtered = tickers
+    .filter(t => t.symbol.endsWith("USDT") && !ex.has(t.symbol))
+    .map(t => ({
+      symbol: t.symbol,
+      quoteVolume: parseFloat(t.quoteVolume || "0"),
+    }))
+    .sort((a,b) => b.quoteVolume - a.quoteVolume)
+    .slice(0, CONFIG.UNIVERSE_LIMIT)
+    .map(x => x.symbol);
+
+  universe = filtered;
+  $("universeN").textContent = universe.length;
+
+  // 啟動 / 關閉 aggTrade streams（只維持 universe）
+  const uSet = new Set(universe);
+  // close removed
+  Object.keys(wsAgg).forEach(sym => {
+    if (!uSet.has(sym)) {
+      try { wsAgg[sym].close(); } catch {}
+      delete wsAgg[sym];
+      delete symState[sym];
     }
-    return js;
-  } finally {
-    clearTimeout(t);
+  });
+  // open new
+  for (const sym of universe) {
+    if (!wsAgg[sym]) initAggTrade(sym);
+    if (!symState[sym]) initSymbolState(sym);
   }
 }
 
-/* =========================
-   BINANCE DATA
-========================= */
+/* ===========================
+   Per-symbol state + streams
+=========================== */
+function initSymbolState(sym) {
+  symState[sym] = {
+    symbol: sym,
+    price: null,
+    lastTradeTs: 0,
 
-async function getTickers24h(){
-  return await fetchJson(`${BINANCE_REST}/fapi/v1/ticker/24hr`);
-}
+    // 5m rolling window (trade samples)
+    trades: [], // {ts, price, notional, deltaNotional, isBuy}
 
-async function getKlines1m(symbol, limit=240){
-  return await fetchJson(`${BINANCE_REST}/fapi/v1/klines?symbol=${symbol}&interval=1m&limit=${limit}`);
-}
+    // 5m bucket history (for zscore)
+    buckets: new Map(), // bucketId -> {notional, deltaNotional}
+    bucketIds: [],      // keep ordering (max HIST_5M_BUCKETS + 2)
 
-async function getPremiumIndex(symbol){
-  return await fetchJson(`${BINANCE_REST}/fapi/v1/premiumIndex?symbol=${symbol}`);
-}
+    vol5mNotional: null,
+    delta5mNotional: null,
+    imbalance5m: null, // buy/(buy+sell)
 
-async function getOpenInterestHist(symbol, period, limit=2){
-  // period: 5m, 4h
-  return await fetchJson(`${BINANCE_REST}/futures/data/openInterestHist?symbol=${symbol}&period=${period}&limit=${limit}`);
-}
+    volZ5m: null,
+    deltaZ5m: null,
 
-async function getTakerRatio(symbol, period, limit=2){
-  // period: 5m, 4h
-  return await fetchJson(`${BINANCE_REST}/futures/data/takerlongshortRatio?symbol=${symbol}&period=${period}&limit=${limit}`);
-}
+    ret5mPct: null,
 
-/* =========================
-   MATH HELPERS
-========================= */
-
-function mean(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
-function std(arr){
-  if(arr.length < 2) return 0;
-  const m = mean(arr);
-  const v = mean(arr.map(x=>(x-m)*(x-m)));
-  return Math.sqrt(v);
-}
-function clamp(x,a,b){ return Math.max(a, Math.min(b,x)); }
-function ema(prev, cur, alpha){
-  if(prev==null || !isFinite(prev)) return cur;
-  return prev*(1-alpha) + cur*alpha;
-}
-function pct(a,b){
-  // (b-a)/a
-  if(!isFinite(a) || a===0) return 0;
-  return (b-a)/a;
-}
-
-/* =========================
-   FEATURE EXTRACTION (1m klines)
-========================= */
-
-function extractFromKlines(kl){
-  // kline: [ openTime, open, high, low, close, volume, closeTime, quoteVolume, trades, takerBuyBaseVol, takerBuyQuoteVol, ignore]
-  const closes = kl.map(k=>+k[4]);
-  const highs  = kl.map(k=>+k[2]);
-  const lows   = kl.map(k=>+k[3]);
-  const qvol   = kl.map(k=>+k[7]); // quote volume
-  const last = closes[closes.length-1];
-
-  // returns (log-ish)
-  const rets = [];
-  for(let i=1;i<closes.length;i++){
-    rets.push(Math.log(closes[i]/closes[i-1]));
-  }
-
-  const baseVol = std(rets.slice(0, rets.length-5)); // ~4h baseline
-  const vol5 = std(rets.slice(rets.length-5));
-  const volAnom = baseVol>0 ? (vol5/baseVol) : 0;
-
-  const ret5m = pct(closes[closes.length-6], last) * 100;
-
-  // SMA20 + ATR14
-  const sma20 = mean(closes.slice(-20));
-  const tr = [];
-  for(let i=1;i<closes.length;i++){
-    const h = highs[i], l = lows[i], pc = closes[i-1];
-    tr.push(Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc)));
-  }
-  const atr14 = mean(tr.slice(-14));
-  const distSmaAtr = atr14>0 ? (last - sma20)/atr14 : 0; // >0 above SMA20
-
-  // volume anomaly (5m vs baseline 4h avg 5m block)
-  const last5Q = qvol.slice(-5).reduce((a,b)=>a+b,0);
-  const blocks = [];
-  for(let i=0;i<qvol.length-5;i+=5){
-    blocks.push(qvol.slice(i,i+5).reduce((a,b)=>a+b,0));
-  }
-  const bMean = mean(blocks);
-  const bStd = std(blocks);
-  const volZ = bStd>0 ? (last5Q - bMean)/bStd : 0;
-
-  // simple pattern tags
-  const tag = [];
-  const hh20 = Math.max(...highs.slice(-20));
-  const ll20 = Math.min(...lows.slice(-20));
-  const rangePct = (hh20-ll20)/last*100;
-
-  if(last > hh20*0.9995) tag.push("突破近20根高點");
-  if(rangePct < 0.8) tag.push("窄幅收斂");
-  if(ret5m > 0 && distSmaAtr < 1.2 && volZ > 1.2) tag.push("量增緩漲");
-  if(ret5m > 0.9) tag.push("短線已急拉");
-  if(distSmaAtr > 2.0) tag.push("偏離均線偏大");
-
-  return { last, volAnom, ret5m, distSmaAtr, volZ, tags: tag };
-}
-
-/* =========================
-   STAGE + SCORE (Long-only)
-========================= */
-
-function stageAndScore(m){
-  // m: merged metrics
-  // Key: want early but anti-chase
-  const warm = m.warmup !== "ok";
-  if(warm){
-    return { stage:"熱機中", badge:"b-warm", score:0, why:"資料熱機不足（等 1~2 分鐘會好很多）" };
-  }
-
-  // chase penalty
-  let chase = 0;
-  if(m.ret5m > 0.9) chase += (m.ret5m-0.9)*12;
-  if(m.distSmaAtr > 2.0) chase += (m.distSmaAtr-2.0)*18;
-
-  // bullish ingredients
-  const volPart = clamp((m.volAnom - 1.0) * 18, -10, 60);     // volatility anomaly
-  const oiPart  = clamp(m.oiZ * 16, -20, 60);
-  const flowPart= clamp(m.flowZ * 18, -25, 70);
-  const vPart   = clamp(m.volZ * 10, -15, 40);
-  const patPart = (m.tags.includes("突破近20根高點") ? 16 : 0) + (m.tags.includes("窄幅收斂") ? 10 : 0) + (m.tags.includes("量增緩漲") ? 10 : 0);
-
-  let score = 0.22*volPart + 0.25*oiPart + 0.28*flowPart + 0.15*vPart + 0.10*patPart;
-  score -= chase;
-
-  // stage logic
-  let stage = "蓄勢", badge = "b-setup", why = [];
-  if(score < 6){ stage="觀望"; badge="b-warm"; why.push("綜合優勢不足"); }
-  else {
-    // Setup
-    if(m.volAnom > 1.25) why.push("波動率上升（異常）");
-    if(m.oiZ > 0.8) why.push("OI 抬升（偏多）");
-    if(m.flowZ > 0.8) why.push("主動買入增強");
-    if(m.volZ > 1.0) why.push("量能放大");
-    if(m.tags.includes("窄幅收斂")) why.push("收斂整理");
-    if(m.tags.includes("突破近20根高點")) why.push("突破訊號");
-
-    // Ignite
-    if(m.flowZ > 1.2 && m.oiZ > 0.9 && m.ret5m > -0.2 && m.volZ > 0.8){
-      stage = "點火"; badge="b-ignite";
-    }
-    // Confirm
-    if(m.tags.includes("突破近20根高點") && m.flowZ > 1.2 && m.volZ > 1.2 && m.ret5m > 0.15 && m.ret5m < 0.9){
-      stage = "觸發"; badge="b-confirm";
-    }
-
-    // Risk / anti-chase
-    if(chase > 10){
-      stage = "追價風險"; badge="b-risk";
-      why.push("短線已拉高 / 偏離均線太多（不追）");
-    }
-  }
-
-  score = clamp(score, -50, 100);
-
-  return { stage, badge, score, why: why.join("、") || "-" };
-}
-
-/* =========================
-   WS (Top5 only) for 5m Active Buy Delta
-========================= */
-
-function ensureWsFor(symbol){
-  if(S.ws.has(symbol)) return;
-  const url = `${BINANCE_WS_BASE}/${symbol.toLowerCase()}@aggTrade`;
-  const ws = new WebSocket(url);
-
-  const bucket = {
-    ws,
-    trades: [], // {t, buyNotional, sellNotional}
-    buy5m: 0,
-    sell5m: 0
-  };
-
-  ws.onopen = ()=>{};
-  ws.onerror = ()=>{};
-  ws.onclose = ()=>{ S.ws.delete(symbol); };
-
-  ws.onmessage = (e)=>{
-    const d = JSON.parse(e.data);
-    const t = d.T || nowTs();
-    const price = +d.p;
-    const qty = +d.q;
-    const notional = price * qty;
-
-    // m=true => buyer is maker => taker sell
-    const isTakerBuy = !d.m;
-    const buyN = isTakerBuy ? notional : 0;
-    const sellN= isTakerBuy ? 0 : notional;
-
-    bucket.trades.push({ t, buyN, sellN });
-    bucket.buy5m += buyN;
-    bucket.sell5m += sellN;
-
-    // purge older than 5m
-    const cut = nowTs() - TOP_WS_ROLLING_MS;
-    while(bucket.trades.length && bucket.trades[0].t < cut){
-      const x = bucket.trades.shift();
-      bucket.buy5m -= x.buyN;
-      bucket.sell5m-= x.sellN;
-    }
-
-    const obj = S.data.get(symbol);
-    if(obj){
-      obj.buy5m = bucket.buy5m;
-      obj.sell5m= bucket.sell5m;
-      const denom = (bucket.buy5m + bucket.sell5m);
-      obj.imb5m = denom>0 ? (bucket.buy5m - bucket.sell5m)/denom : null; // -1..1
-      obj.delta5m = bucket.buy5m - bucket.sell5m; // notional
-      obj.lastTickTs = nowTs();
-    }
-  };
-
-  S.ws.set(symbol, bucket);
-}
-
-function trimWsToTop5(){
-  const keep = new Set(S.top.map(x=>x.symbol));
-  for(const [sym, b] of S.ws.entries()){
-    if(!keep.has(sym)){
-      try{ b.ws.close(); }catch(e){}
-      S.ws.delete(sym);
-    }
-  }
-  // ensure ws for each top
-  for(const sym of keep) ensureWsFor(sym);
-}
-
-/* =========================
-   SCAN PIPELINE
-========================= */
-
-async function fastScan(){
-  S.lastFastAt = nowTs();
-  setStatus("Fast scan：更新 24h ticker…");
-  const tickers = await getTickers24h();
-
-  const list = tickers
-    .filter(x => x.symbol && x.symbol.endsWith("USDT"))
-    .filter(x => !EXCLUDE_TOP_MCAP_25.has(x.symbol))
-    .filter(x => !EXCLUDE_EXTRA.has(x.symbol))
-    .filter(x => +x.quoteVolume >= MIN_QUOTE_VOL_24H);
-
-  // 先用量能排序，取 Universe
-  list.sort((a,b)=> (+b.quoteVolume) - (+a.quoteVolume));
-  S.universe = list.slice(0, UNIVERSE_SIZE).map(x=>({
-    symbol: x.symbol,
-    lastPrice: +x.lastPrice,
-    quoteVolume: +x.quoteVolume,
-    priceChangePercent: +x.priceChangePercent
-  }));
-
-  // deepList：從 universe 挑一批（避免全打）
-  // 這裡偏向「不要已經大噴」：24h 漲幅過大降權
-  const scored = S.universe.map(u=>{
-    const chase24 = Math.max(0, (u.priceChangePercent - 12)); // >12% 當追價風險
-    const s = Math.log10(u.quoteVolume+1) * 10 - chase24*1.2;
-    return { ...u, fastScore:s };
-  }).sort((a,b)=>b.fastScore-a.fastScore);
-
-  S.deepList = scored.slice(0, DEEP_SIZE).map(x=>x.symbol);
-  updateHeaderCounts();
-
-  setStatus("Fast scan：完成");
-}
-
-async function deepScan(){
-  S.lastDeepAt = nowTs();
-  setStatus("Deep scan：抓 K線/OI/主動買入/資費…");
-
-  const symbols = [...S.deepList];
-  const concurrency = 5;
-  let idx = 0;
-
-  async function worker(){
-    while(idx < symbols.length){
-      const sym = symbols[idx++];
-      try{
-        await updateSymbolDeep(sym);
-      } catch(e){
-        // ignore per-symbol
-      }
-    }
-  }
-
-  const jobs = [];
-  for(let i=0;i<concurrency;i++) jobs.push(worker());
-  await Promise.all(jobs);
-
-  computeTop5();
-  trimWsToTop5();
-  render();
-
-  setStatus("Deep scan：完成");
-}
-
-function warmupState(obj){
-  // 我們要的資料：Klines(240) + OI(5m/4h) + taker(4h) + premium
-  const need = ["k240","oi5","oi4","tk4","prem"];
-  const ok = need.every(k => obj._ok && obj._ok[k]);
-  return ok ? "ok" : "warming";
-}
-
-async function updateSymbolDeep(symbol){
-  const obj = S.data.get(symbol) || {
-    symbol,
-    lastPrice: null,
-
-    // from klines
-    volAnom: null, ret5m: null, distSmaAtr: null, volZ: null, tags: [],
+    // premium/funding
+    fundingPct: null,
+    premiumPct: null,
 
     // OI
-    oi5m: null, oi4h: null, oiZ: null,
+    oiCurrent: null,
+    oiSamples: [], // {ts, oi}
+    oiDelta5m: null,
+    oiDelta4h: null,
 
-    // taker ratio
-    flow4h: null, flowZ: null,
+    // Kline-based risk/entry helpers
+    klinesReady: false,
+    atr14: null,
+    swingLow20: null,
+    swingHigh20: null,
+    range20Pct: null,
+    sma20: null,
+    distSma20Atr: null,
 
-    // premium / funding
-    premiumPct: null, fundingRatePct: null, premZ: null,
+    // derived
+    stage: "熱機中",
+    tags: [],
+    preScore: 0,
 
-    // WS rolling (top5 only)
-    delta5m: null, imb5m: null, buy5m: null, sell5m: null,
-
-    // stage
-    stage: "熱機中", stageWhy:"-", scoreRaw: 0, scoreEma: null,
-
-    // ai
-    ai: { ts:0, data:null, text:"尚未分析：按右上【Gemini】(已改 Groq) 或【Analyze Top】", err:null },
-
-    // bookkeeping
-    _ok: {}
+    // warmup
+    firstSeenTs: Date.now(),
   };
+}
 
-  // pull in price from universe
-  const uni = S.universe.find(x=>x.symbol===symbol);
-  if(uni) obj.lastPrice = uni.lastPrice;
+function initAggTrade(sym) {
+  const url = `wss://fstream.binance.com/ws/${sym.toLowerCase()}@aggTrade`;
+  const ws = new WebSocket(url);
+  wsAgg[sym] = ws;
 
-  // 1) klines 240
-  try{
-    const kl = await getKlines1m(symbol, 240);
-    const ex = extractFromKlines(kl);
-    obj.lastPrice = ex.last;
-    obj.volAnom = ex.volAnom;
-    obj.ret5m = ex.ret5m;
-    obj.distSmaAtr = ex.distSmaAtr;
-    obj.volZ = ex.volZ;
-    obj.tags = ex.tags;
-    obj._ok.k240 = true;
-  }catch(e){ obj._ok.k240 = false; }
-
-  // 2) OI 5m / 4h
-  try{
-    const oi5 = await getOpenInterestHist(symbol, "5m", 2);
-    if(oi5 && oi5.length>=2){
-      const a = +oi5[0].sumOpenInterest, b=+oi5[1].sumOpenInterest;
-      obj.oi5m = (b-a);
-      // z：用相對變化粗估（前端很難拿到完整分布）
-      const base = Math.max(1e-9, Math.abs(a));
-      const r = (b-a)/base;
-      obj.oi5r = r;
+  ws.onopen = () => {
+    $("hb").classList.add("hb-on");
+    setStatus("binStatus","WS OK","ok");
+  };
+  ws.onerror = () => {
+    setStatus("binStatus","WS error","warn");
+  };
+  ws.onclose = () => {
+    // 會自動重連（若還在 universe）
+    if (universe.includes(sym)) {
+      setTimeout(() => {
+        if (!wsAgg[sym] || wsAgg[sym].readyState === 3) initAggTrade(sym);
+      }, 800 + Math.random()*800);
     }
-    obj._ok.oi5 = true;
-  }catch(e){ obj._ok.oi5 = false; }
+  };
 
-  try{
-    const oi4 = await getOpenInterestHist(symbol, "4h", 2);
-    if(oi4 && oi4.length>=2){
-      const a = +oi4[0].sumOpenInterest, b=+oi4[1].sumOpenInterest;
-      obj.oi4h = (b-a);
-      const base = Math.max(1e-9, Math.abs(a));
-      const r = (b-a)/base;
-      obj.oi4r = r;
+  ws.onmessage = (ev) => {
+    const s = symState[sym];
+    if (!s) return;
+    const d = JSON.parse(ev.data);
+
+    const ts = d.T;
+    const price = parseFloat(d.p);
+    const qty = parseFloat(d.q);
+    const notional = price * qty;
+
+    // d.m: buyer is maker -> 代表這筆是「賣方主動」；反之是「買方主動」
+    const isBuyAgg = !d.m;
+    const deltaNotional = isBuyAgg ? notional : -notional;
+
+    s.price = price;
+    s.lastTradeTs = ts;
+
+    // rolling trade samples for 5m return + delta
+    s.trades.push({ ts, price, notional, deltaNotional, isBuy: isBuyAgg });
+
+    // prune trades older than 5m
+    const cutoff = Date.now() - CONFIG.ROLL_5M_MS;
+    while (s.trades.length && s.trades[0].ts < cutoff) s.trades.shift();
+
+    // compute 5m return
+    if (s.trades.length >= 2) {
+      const old = s.trades[0].price;
+      if (old > 0) s.ret5mPct = (price / old - 1) * 100;
     }
-    obj._ok.oi4 = true;
-  }catch(e){ obj._ok.oi4 = false; }
 
-  // OI Z：把 5m 相對變化 與 4h 相對變化 做一個合成（偏「短期突然抬升」）
-  if(isFinite(obj.oi5r) && isFinite(obj.oi4r)){
-    // 直覺：短期比長期更強 => 正
-    obj.oiZ = clamp((obj.oi5r - 0.25*obj.oi4r) * 420, -3, 4); // scaling
-  } else {
-    obj.oiZ = null;
-  }
-
-  // 3) taker ratio 4h（給你長週期主動買入差額）
-  try{
-    const tk4 = await getTakerRatio(symbol, "4h", 2);
-    if(tk4 && tk4.length>=2){
-      const last = tk4[1];
-      const buy = +last.buyVol;
-      const sell= +last.sellVol;
-      obj.flow4h = (buy - sell); // base qty
-      // flowZ：用 buySellRatio 偏離 1 估（>1 代表買強）
-      const r = +last.buySellRatio;
-      obj.flowZ = clamp((r - 1.0) * 3.2, -3, 4);
-    }
-    obj._ok.tk4 = true;
-  }catch(e){ obj._ok.tk4 = false; }
-
-  // 4) premium/funding
-  try{
-    const p = await getPremiumIndex(symbol);
-    const mark = +p.markPrice;
-    const idxp = +p.indexPrice;
-    const prem = (idxp>0) ? (mark-idxp)/idxp*100 : 0;
-    obj.premiumPct = prem;
-    obj.fundingRatePct = (+p.lastFundingRate)*100;
-    // premZ：粗估（短線偏多時 prem>0）
-    obj.premZ = clamp(prem * 4.0, -3, 3);
-    obj._ok.prem = true;
-  }catch(e){ obj._ok.prem = false; }
-
-  // warmup?
-  obj.warmup = warmupState(obj);
-
-  // stage+score (need imb5m/delta5m from WS only for Top5; for others用 flowZ 代替)
-  const flowZ = isFinite(obj.imb5m) ? clamp(obj.imb5m*3.5, -3, 4) : (isFinite(obj.flowZ)?obj.flowZ:0);
-  const merged = {
-    warmup: obj.warmup,
-    volAnom: obj.volAnom ?? 0,
-    ret5m: obj.ret5m ?? 0,
-    distSmaAtr: obj.distSmaAtr ?? 0,
-    volZ: obj.volZ ?? 0,
-    tags: obj.tags ?? [],
-    oiZ: isFinite(obj.oiZ) ? obj.oiZ : 0,
-    flowZ: flowZ,
-  };
-
-  const st = stageAndScore(merged);
-  obj.stage = st.stage;
-  obj.stageWhy = st.why;
-  obj.scoreRaw = st.score;
-  obj.scoreEma = ema(obj.scoreEma, obj.scoreRaw, 0.22);
-
-  S.data.set(symbol, obj);
-}
-
-function computeTop5(){
-  // candidate: symbols in deep list with scoreEma
-  const arr = [...S.data.values()]
-    .filter(x => S.deepList.includes(x.symbol))
-    .map(x=>{
-      const score = (x.scoreEma ?? x.scoreRaw ?? 0);
-      return { symbol:x.symbol, score, stage:x.stage };
-    })
-    .sort((a,b)=> b.score - a.score);
-
-  const best = arr[0];
-
-  // champion lock
-  if(!S.champion.symbol && best){
-    S.champion = { symbol: best.symbol, score: best.score };
-  } else if(best && best.symbol !== S.champion.symbol){
-    if(best.score >= S.champion.score * HYSTERESIS_RATIO){
-      S.champion = { symbol: best.symbol, score: best.score };
-    }
-  } else if(best && best.symbol === S.champion.symbol){
-    // keep updated score
-    S.champion.score = best.score;
-  }
-
-  // Top list: champion first, then next best excluding champion
-  const top = [];
-  if(S.champion.symbol){
-    top.push({ symbol:S.champion.symbol, score:S.champion.score, stage:(S.data.get(S.champion.symbol)?.stage)||"-" });
-  }
-  for(const x of arr){
-    if(top.length>=TOP_SIZE) break;
-    if(x.symbol===S.champion.symbol) continue;
-    top.push(x);
-  }
-  S.top = top;
-  updateHeaderCounts();
-}
-
-/* =========================
-   RENDER
-========================= */
-
-function stageBadge(stage){
-  if(stage==="蓄勢") return ["b-setup","🟨 蓄勢"];
-  if(stage==="點火") return ["b-ignite","🟧 點火"];
-  if(stage==="觸發") return ["b-confirm","🟩 觸發"];
-  if(stage==="追價風險") return ["b-risk","⛔ 追價風險"];
-  if(stage==="觀望") return ["b-warm","⚪ 觀望"];
-  return ["b-warm","⏳ 熱機中"];
-}
-
-function num(x, d=2){
-  if(x==null || !isFinite(x)) return "-";
-  return (+x).toFixed(d);
-}
-
-function money(x){
-  if(x==null || !isFinite(x)) return "-";
-  const a = Math.abs(x);
-  if(a>=1e9) return (x/1e9).toFixed(2)+"B";
-  if(a>=1e6) return (x/1e6).toFixed(2)+"M";
-  if(a>=1e3) return (x/1e3).toFixed(2)+"K";
-  return x.toFixed(0);
-}
-
-function render(){
-  document.getElementById("updTime").innerText = fmtTime(nowTs());
-  setHB("on");
-
-  const root = document.getElementById("cards");
-  root.innerHTML = "";
-
-  for(let rank=0; rank<S.top.length; rank++){
-    const {symbol, score} = S.top[rank];
-    const obj = S.data.get(symbol);
-    if(!obj) continue;
-
-    const [bClass, bTxt] = stageBadge(obj.stage);
-    const isChampion = (symbol === S.champion.symbol);
-
-    const card = document.createElement("div");
-    card.className = `card p-3 ${isChampion ? "card-strong" : ""}`;
-
-    const tags = (obj.tags && obj.tags.length) ? obj.tags.join("、") : "-";
-
-    const aiText = renderAiReadable(obj);
-
-    card.innerHTML = `
-      <div class="flex items-start justify-between gap-2 flex-wrap">
-        <div class="flex items-center gap-2">
-          <div class="text-white font-black text-lg">${symbol}</div>
-          <span class="badge ${bClass}">${bTxt}</span>
-          ${isChampion ? `<span class="badge b-confirm">🏆 最強鎖定</span>` : `<span class="badge b-warm">#${rank+1}</span>`}
-          <span class="badge b-warm">score ${score.toFixed(2)}</span>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button class="btn btn-green" data-ai="${symbol}">AI（Groq）</button>
-          <button class="btn" data-tv="${symbol}">VIEW</button>
-        </div>
-      </div>
-
-      <div class="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <!-- Left metrics -->
-        <div class="lg:col-span-2">
-          <div class="text-[12px] muted mb-2">型態標籤：<span class="text-white font-black">${tags}</span></div>
-
-          <div class="grid-m">
-            <div class="kv"><div class="muted text-[11px]">波動異常比（5m/4h）</div><div class="text-white font-black text-[14px]">${num(obj.volAnom,2)}</div></div>
-            <div class="kv"><div class="muted text-[11px]">成交量異常Z（5m vs 4h）</div><div class="text-white font-black text-[14px]">${num(obj.volZ,2)}</div></div>
-            <div class="kv"><div class="muted text-[11px]">5分鐘漲跌</div><div class="text-white font-black text-[14px]">${num(obj.ret5m,2)}%</div></div>
-
-            <div class="kv"><div class="muted text-[11px]">OI 變化（5m）</div><div class="text-white font-black text-[14px]">${money(obj.oi5m)}</div></div>
-            <div class="kv"><div class="muted text-[11px]">OI 變化（4h）</div><div class="text-white font-black text-[14px]">${money(obj.oi4h)}</div></div>
-            <div class="kv"><div class="muted text-[11px]">OI 異常Z（合成）</div><div class="text-white font-black text-[14px]">${num(obj.oiZ,2)}</div></div>
-
-            <div class="kv"><div class="muted text-[11px]">主動買入差額（5m, WS notional）</div><div class="text-white font-black text-[14px]">${obj.delta5m==null? "（Top5 WS 計算中）" : money(obj.delta5m)}</div></div>
-            <div class="kv"><div class="muted text-[11px]">主動買入比例（5m, -1~+1）</div><div class="text-white font-black text-[14px]">${obj.imb5m==null? "-" : num(obj.imb5m,3)}</div></div>
-            <div class="kv"><div class="muted text-[11px]">主動買入強度Z（用 4h ratio 或 WS）</div><div class="text-white font-black text-[14px]">${num((isFinite(obj.imb5m)? clamp(obj.imb5m*3.5,-3,4) : obj.flowZ),2)}</div></div>
-
-            <div class="kv"><div class="muted text-[11px]">溢價 premium（%）</div><div class="text-white font-black text-[14px]">${num(obj.premiumPct,3)}%</div></div>
-            <div class="kv"><div class="muted text-[11px]">資金費率 funding（%）</div><div class="text-white font-black text-[14px]">${num(obj.fundingRatePct,4)}%</div></div>
-            <div class="kv"><div class="muted text-[11px]">偏離均線（以 ATR）</div><div class="text-white font-black text-[14px]">${num(obj.distSmaAtr,2)}</div></div>
-          </div>
-
-          <div class="mt-2 text-[12px]">
-            <span class="muted">狀態解釋：</span>
-            <span class="text-white font-black">${obj.stageWhy || "-"}</span>
-          </div>
-
-          <div id="chart-${symbol}" class="chart-box"></div>
-        </div>
-
-        <!-- Right AI -->
-        <div class="ai-box">
-          <div class="ai-title">AI 判讀（中文）</div>
-          <div class="ai-line muted">模型：${S.model} ｜ max_tokens：${AI_MAX_TOKENS}</div>
-          <div class="ai-line">${aiText}</div>
-        </div>
-      </div>
-    `;
-
-    root.appendChild(card);
-
-    // bind buttons
-    card.querySelector(`[data-ai="${symbol}"]`).onclick = ()=> analyzeOne(symbol, true);
-    card.querySelector(`[data-tv="${symbol}"]`).onclick = ()=> toggleTV(symbol);
-  }
-}
-
-function toggleTV(symbol){
-  const el = document.getElementById(`chart-${symbol}`);
-  if(!el) return;
-
-  if(el.classList.contains("active")){
-    el.classList.remove("active");
-    setTimeout(()=>{ el.innerHTML=""; }, 250);
-    return;
-  }
-  el.classList.add("active");
-  const cid = `tv-${symbol}-${Math.random().toString(16).slice(2)}`;
-  el.innerHTML = `<div id="${cid}" style="width:100%; height:100%;"></div>`;
-  new TradingView.widget({
-    autosize:true,
-    symbol: "BINANCE:" + symbol + "PERP",
-    interval: "1",
-    theme: "dark",
-    style: "1",
-    hide_top_toolbar: true,
-    hide_legend: true,
-    save_image: false,
-    container_id: cid
-  });
-}
-
-/* =========================
-   GROQ AI
-========================= */
-
-function hasKey(){
-  return !!(S.apiKey && S.apiKey.trim().length > 10);
-}
-
-function groqSupportsStrict(model){
-  return model.startsWith("openai/gpt-oss-");
-}
-
-function buildAiPayload(symbol){
-  const o = S.data.get(symbol);
-  const top = S.top.map(x=>x.symbol);
-  const summary = {
-    symbol,
-    long_only: true,
-    stage: o.stage,
-    score: Math.round(clamp((o.scoreEma ?? o.scoreRaw ?? 0),0,100)),
-    price: o.lastPrice,
-    ret5m_pct: o.ret5m,
-    vol_anom_ratio: o.volAnom,
-    volZ_5m: o.volZ,
-    oi5m: o.oi5m,
-    oi4h: o.oi4h,
-    oiZ: o.oiZ,
-    active_delta_5m_notional: o.delta5m,
-    active_imbalance_5m: o.imb5m,
-    active_flowZ: (isFinite(o.imb5m)? clamp(o.imb5m*3.5,-3,4) : o.flowZ),
-    premium_pct: o.premiumPct,
-    funding_pct: o.fundingRatePct,
-    dist_sma20_atr: o.distSmaAtr,
-    tags: o.tags,
-    top5: top,
-    note: "請用繁體中文。請一定輸出 JSON，不要任何多餘文字。"
-  };
-
-  const schema = {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      symbol: { type:"string" },
-      direction: { type:"string", enum:["做多","觀望"] },
-      score: { type:"integer", minimum:0, maximum:100 },
-      confidence: { type:"integer", minimum:0, maximum:100 },
-      eta_minutes: { type:"string", description:"例如 5-15 表示預計 5~15 分鐘內表態", pattern:"^\\d{1,3}-\\d{1,3}$" },
-      stage: { type:"string", enum:["蓄勢","點火","觸發","追價風險","熱機中","觀望"] },
-
-      entry: {
-        type:"object",
-        additionalProperties:false,
-        properties:{
-          type:{ type:"string", enum:["市價","限價","分批"] },
-          price:{ type:"number" },
-          zone:{ type:"string" },
-          logic:{ type:"string" }
-        },
-        required:["type","price","zone","logic"]
-      },
-
-      stop: {
-        type:"object",
-        additionalProperties:false,
-        properties:{
-          price:{ type:"number" },
-          logic:{ type:"string" }
-        },
-        required:["price","logic"]
-      },
-
-      take_profit: {
-        type:"array",
-        maxItems: 3,
-        items:{
-          type:"object",
-          additionalProperties:false,
-          properties:{
-            price:{ type:"number" },
-            portion:{ type:"number", minimum:0, maximum:1 },
-            logic:{ type:"string" }
-          },
-          required:["price","portion","logic"]
-        }
-      },
-
-      invalidation: { type:"array", maxItems: 6, items:{ type:"string" } },
-      reasons: { type:"array", maxItems: 6, items:{ type:"string" } },
-      risk_notes: { type:"array", maxItems: 6, items:{ type:"string" } }
-    },
-    required:["symbol","direction","score","confidence","eta_minutes","stage","entry","stop","take_profit","invalidation","reasons","risk_notes"]
-  };
-
-  const system = [
-    "你是合約交易策略分析助手。",
-    "只做多（long-only）：若不適合做多，direction 請回「觀望」。",
-    "你要預測『幾分鐘內可能表態』，輸出 eta_minutes 區間（例如 5-15）。",
-    "你必須提供：分數(score 0~100)、信心(confidence 0~100)、階段(stage)、進場(entry)、停損(stop)、分批止盈(take_profit)、失效條件(invalidation)、理由(reasons)、風險提示(risk_notes)。",
-    "務必 anti-chase：如果已急拉/偏離均線過大/追價風險，stage=追價風險，direction=觀望 或 降低信心。",
-    "所有文字用繁體中文。",
-    "只能輸出 JSON（不得有任何多餘文字）。"
-  ].join("\n");
-
-  const req = {
-    model: S.model,
-    messages: [
-      { role:"system", content: system },
-      { role:"user", content: JSON.stringify(summary) }
-    ],
-    temperature: 0.2,
-    top_p: 0.95,
-    max_completion_tokens: AI_MAX_TOKENS
-  };
-
-  // Structured Outputs (JSON schema strict) for openai/gpt-oss-* :contentReference[oaicite:2]{index=2}
-  if(groqSupportsStrict(S.model)){
-    req.response_format = {
-      type: "json_schema",
-      json_schema: {
-        name: "trident_long_signal",
-        strict: true,
-        schema
+    // bucket update (5m buckets)
+    const bucketId = Math.floor(ts / CONFIG.BUCKET_5M_MS);
+    let b = s.buckets.get(bucketId);
+    if (!b) {
+      b = { notional: 0, deltaNotional: 0 };
+      s.buckets.set(bucketId, b);
+      s.bucketIds.push(bucketId);
+      // keep last HIST buckets + some headroom
+      while (s.bucketIds.length > CONFIG.HIST_5M_BUCKETS + 3) {
+        const id = s.bucketIds.shift();
+        s.buckets.delete(id);
       }
-    };
-  } else {
-    // JSON object mode fallback :contentReference[oaicite:3]{index=3}
-    req.response_format = { type:"json_object" };
-  }
+    }
+    b.notional += notional;
+    b.deltaNotional += deltaNotional;
 
-  return req;
+    // compute current 5m bucket stats
+    const curB = s.buckets.get(bucketId);
+    if (curB) {
+      s.vol5mNotional = curB.notional;
+      s.delta5mNotional = curB.deltaNotional;
+
+      // imbalance: approximate from delta and total (not perfect, but useful)
+      // buyNotional = (total + delta)/2 ; sellNotional = (total - delta)/2
+      const total = curB.notional || 0;
+      const delta = curB.deltaNotional || 0;
+      const buy = (total + delta) / 2;
+      const sell = (total - delta) / 2;
+      const denom = buy + sell;
+      s.imbalance5m = denom > 0 ? (buy / denom) : null;
+    }
+
+    // zscores based on previous full buckets (exclude current bucket for stability)
+    const histIds = s.bucketIds.filter(id => id !== bucketId);
+    const histVol = histIds.map(id => (s.buckets.get(id)?.notional || 0)).filter(x => x > 0);
+    const histDelta = histIds.map(id => (s.buckets.get(id)?.deltaNotional || 0));
+    if (s.vol5mNotional !== null) s.volZ5m = zscore(s.vol5mNotional, histVol);
+    if (s.delta5mNotional !== null) s.deltaZ5m = zscore(s.delta5mNotional, histDelta);
+
+    // sync premium/funding (from cached premiumMap)
+    const p = premiumMap[sym];
+    if (p) {
+      s.fundingPct = p.fundingPct;
+      s.premiumPct = p.premiumPct;
+    }
+
+    // recompute derived
+    deriveSymbol(sym);
+  };
 }
 
-function tryParseJsonLoose(s){
-  if(!s) return null;
-  try { return JSON.parse(s); } catch(e){}
-  // fallback: extract first {...}
-  const a = s.indexOf("{");
-  const b = s.lastIndexOf("}");
-  if(a>=0 && b>a){
-    try { return JSON.parse(s.slice(a,b+1)); } catch(e){}
+/* ===========================
+   OI + Klines bootstrap for candidates
+=========================== */
+async function ensureKlinesAndOI(sym) {
+  const s = symState[sym];
+  if (!s) return;
+
+  // Klines fetch (1m, 60)
+  try {
+    const k = await fetchJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1m&limit=${CONFIG.KLINES_LIMIT}`);
+    computeKlineFeatures(sym, k);
+  } catch (e) {
+    // ignore
   }
-  return null;
+
+  // OI fetch current
+  try {
+    const oi = await fetchJSON(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`);
+    const v = parseFloat(oi.openInterest);
+    if (!Number.isNaN(v)) {
+      s.oiCurrent = v;
+      s.oiSamples.push({ ts: Date.now(), oi: v });
+      // keep 4h samples
+      const cutoff = Date.now() - 4*60*60*1000 - 60*1000;
+      while (s.oiSamples.length && s.oiSamples[0].ts < cutoff) s.oiSamples.shift();
+      computeOIDeltas(sym);
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
-async function groqCall(payload){
-  if(!hasKey()) throw new Error("NO_KEY");
+/* ===========================
+   Kline features: ATR14, swing low/high, range%
+=========================== */
+function computeKlineFeatures(sym, k) {
+  const s = symState[sym];
+  if (!s || !Array.isArray(k) || k.length < 25) return;
 
-  const res = await fetch(GROQ_ENDPOINT, {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "Authorization": "Bearer " + S.apiKey.trim()
-    },
+  // Parse candles
+  const candles = k.map(x => ({
+    open: parseFloat(x[1]),
+    high: parseFloat(x[2]),
+    low:  parseFloat(x[3]),
+    close:parseFloat(x[4]),
+  })).filter(c => [c.open,c.high,c.low,c.close].every(v => !Number.isNaN(v)));
+
+  if (candles.length < 25) return;
+
+  // SMA20 close
+  const last20 = candles.slice(-20);
+  s.sma20 = last20.reduce((a,c)=>a+c.close,0) / last20.length;
+
+  // Swing window
+  const w = candles.slice(-CONFIG.SWING_WINDOW);
+  s.swingLow20 = Math.min(...w.map(c => c.low));
+  s.swingHigh20 = Math.max(...w.map(c => c.high));
+  const lastClose = candles[candles.length-1].close;
+  s.range20Pct = lastClose > 0 ? ((s.swingHigh20 - s.swingLow20) / lastClose * 100) : null;
+
+  // ATR14
+  const n = CONFIG.ATR_PERIOD;
+  const trs = [];
+  for (let i=1; i<candles.length; i++) {
+    const cur = candles[i];
+    const prev = candles[i-1];
+    const tr = Math.max(
+      cur.high - cur.low,
+      Math.abs(cur.high - prev.close),
+      Math.abs(cur.low - prev.close)
+    );
+    trs.push(tr);
+  }
+  if (trs.length >= n) {
+    const lastTR = trs.slice(-n);
+    s.atr14 = lastTR.reduce((a,v)=>a+v,0) / lastTR.length;
+  }
+
+  // distSma20Atr
+  if (s.atr14 && s.atr14 > 0 && s.sma20 && lastClose) {
+    s.distSma20Atr = Math.abs(lastClose - s.sma20) / s.atr14;
+  }
+
+  s.klinesReady = true;
+}
+
+/* ===========================
+   OI deltas
+=========================== */
+function computeOIDeltas(sym) {
+  const s = symState[sym];
+  if (!s || s.oiSamples.length < 3) return;
+  const now = Date.now();
+
+  const getOiAgo = (ms) => {
+    const t = now - ms;
+    // 找最接近但<=t 的
+    let best = null;
+    for (let i=s.oiSamples.length-1; i>=0; i--) {
+      if (s.oiSamples[i].ts <= t) { best = s.oiSamples[i]; break; }
+    }
+    return best ? best.oi : null;
+  };
+
+  const oi5m = getOiAgo(5*60*1000);
+  const oi4h = getOiAgo(4*60*60*1000);
+
+  if (oi5m !== null && s.oiCurrent !== null) s.oiDelta5m = s.oiCurrent - oi5m;
+  if (oi4h !== null && s.oiCurrent !== null) s.oiDelta4h = s.oiCurrent - oi4h;
+}
+
+/* ===========================
+   Derive: stage, tags, preScore (LONG bias)
+=========================== */
+function deriveSymbol(sym) {
+  const s = symState[sym];
+  if (!s) return;
+
+  // warmup
+  const warmSec = Math.floor((Date.now() - s.firstSeenTs)/1000);
+
+  const antiChase =
+    (s.ret5mPct !== null && s.ret5mPct > CONFIG.ANTI_CHASE.ret5mPctMax) ||
+    (s.distSma20Atr !== null && s.distSma20Atr > CONFIG.ANTI_CHASE.distSmaAtrMax) ||
+    (s.range20Pct !== null && s.range20Pct > CONFIG.ANTI_CHASE.range20PctMax);
+
+  // Tags
+  const tags = [];
+  if (s.volZ5m !== null && s.volZ5m >= 2.0) tags.push("量能爆量");
+  else if (s.volZ5m !== null && s.volZ5m >= 1.4) tags.push("量能異常");
+  if (s.delta5mNotional !== null && s.delta5mNotional > 0) tags.push("主動買差額>0");
+  if (s.imbalance5m !== null && s.imbalance5m >= 0.55) tags.push("買盤佔優");
+  if (s.oiDelta5m !== null && s.oiDelta5m > 0) tags.push("OI(5m)上升");
+  if (s.oiDelta4h !== null && s.oiDelta4h > 0) tags.push("OI(4h)上升");
+  if (s.fundingPct !== null && s.fundingPct < 0) tags.push("資金費率偏空(利多做多)");
+  if (s.range20Pct !== null && s.range20Pct < 0.9) tags.push("窄幅收斂");
+  if (s.swingHigh20 && s.price && (s.swingHigh20 - s.price)/s.price*100 < 0.25) tags.push("接近突破位");
+  if (antiChase) tags.push("已急拉/追價風險");
+  s.tags = tags;
+
+  // Stage
+  // 注意：只做多，所以重點看「量能 + 主動買 + (OI可選) + 不追價」
+  const flowOK =
+    (s.delta5mNotional !== null && s.delta5mNotional > CONFIG.THRESH.deltaNotionalMin) &&
+    (s.imbalance5m !== null && s.imbalance5m >= (0.5 + CONFIG.THRESH.imbalanceMin));
+
+  const volOK = (s.volZ5m !== null && s.volZ5m >= CONFIG.THRESH.volZMin);
+  const notDump = (s.ret5mPct === null) ? true : (s.ret5mPct > -1.0);
+
+  const setup = volOK && flowOK && notDump && !antiChase;
+  const ignite = setup && (s.price !== null && s.sma20 !== null && s.price > s.sma20);
+  const confirm = ignite && (s.swingHigh20 !== null && s.price !== null && s.price >= s.swingHigh20);
+
+  if (antiChase) s.stage = "追價風險";
+  else if (confirm) s.stage = "觸發";
+  else if (ignite) s.stage = "點火";
+  else if (setup) s.stage = "蓄勢";
+  else s.stage = warmSec < 90 ? "熱機中" : "冷卻";
+
+  // preScore (0~100)
+  // 用 zscore 做主軸，加入 anti-chase 懲罰，偏多加分
+  let score = 50;
+
+  const vz = (s.volZ5m === null) ? 0 : clamp(s.volZ5m, -3, 3);
+  const dz = (s.deltaZ5m === null) ? 0 : clamp(s.deltaZ5m, -3, 3);
+
+  score += 10 * vz;
+  score += 8 * dz;
+
+  // 主動買差額（notional）額外加分（縮放）
+  if (s.delta5mNotional !== null) score += clamp(s.delta5mNotional / 60000, -8, 12);
+
+  // OI：短+長一起上升加分（但不是硬條件）
+  if (s.oiDelta5m !== null && s.oiDelta4h !== null) {
+    if (s.oiDelta5m > 0 && s.oiDelta4h > 0) score += 6;
+    if (s.oiDelta5m < 0 && s.oiDelta4h < 0) score -= 4;
+  }
+
+  // funding/premium：做多不希望 premium 太高（過熱），但 funding < 0 可加分
+  if (s.fundingPct !== null && s.fundingPct < 0) score += 3;
+  if (s.premiumPct !== null && Math.abs(s.premiumPct) > 0.25) score -= 2;
+
+  // anti chase penalty
+  if (antiChase) score -= 18;
+
+  // 如果 5m 漲幅太負（下跌中），扣分
+  if (s.ret5mPct !== null && s.ret5mPct < -0.6) score -= 6;
+
+  s.preScore = clamp(score, 0, 100);
+}
+
+/* ===========================
+   Candidate selection (Top20) - LONG ONLY
+=========================== */
+function buildTop20Candidates() {
+  const ex = new Set([...CONFIG.TOPCAP_EXCLUDE, ...CONFIG.EXCLUDE_EXTRA]);
+
+  // 前端只挑「有料」：長多偏好 + 異常
+  const arr = universe
+    .filter(sym => !ex.has(sym))
+    .map(sym => symState[sym])
+    .filter(s => s && s.price !== null)
+    .filter(s => {
+      // LONG ONLY filter: delta>0 + imbalance>0.5
+      const longBias = (s.delta5mNotional !== null && s.delta5mNotional > 0) &&
+                       (s.imbalance5m !== null && s.imbalance5m >= 0.52);
+      if (!longBias) return false;
+
+      // 有料門檻（你要更兇就提高）
+      if (s.preScore < CONFIG.THRESH.preScoreMin) return false;
+
+      // 不要冷卻（熱機中可以保留）
+      if (s.stage === "冷卻") return false;
+
+      return true;
+    })
+    .sort((a,b) => b.preScore - a.preScore)
+    .slice(0, CONFIG.CANDIDATE_LIMIT);
+
+  candidatesTop20 = arr.map(x => x.symbol);
+  $("candN").textContent = candidatesTop20.length;
+
+  // 候選一旦進入 Top20，就補抓一次 Klines + OI（讓 AI 有 ATR/swing/風控用）
+  for (const s of candidatesTop20) {
+    ensureKlinesAndOI(s);
+  }
+
+  // Debug JSON (Top20 summaries)
+  const summaries = candidatesTop20.map(sym => buildSummary(sym));
+  $("debugJSON").textContent = JSON.stringify({ top20: summaries }, null, 2);
+}
+
+/* ===========================
+   Summary sent to AI (Top20)
+=========================== */
+function buildSummary(sym) {
+  const s = symState[sym];
+  if (!s) return null;
+
+  return {
+    symbol: s.symbol,
+    price: s.price,
+
+    // 핵심：你要的指標
+    ret5m_pct: s.ret5mPct,
+    vol5m_notional: s.vol5mNotional,
+    volZ_5m: s.volZ5m,
+    active_buy_delta_5m_notional: s.delta5mNotional,
+    active_buy_imbalance_5m: (s.imbalance5m !== null) ? (s.imbalance5m - 0.5) * 2 : null, // -1~+1（偏多>0）
+
+    funding_pct: s.fundingPct,
+    premium_pct: s.premiumPct,
+
+    oi_delta_5m: s.oiDelta5m,
+    oi_delta_4h: s.oiDelta4h,
+
+    // ✅ 你要求補齊的 4 個風控/進出場基礎（前端算好，不丟整包K線）
+    atr14: s.atr14,
+    swing_low_20: s.swingLow20,
+    swing_high_20: s.swingHigh20,
+    range_20_pct: s.range20Pct,
+
+    sma20: s.sma20,
+    dist_sma20_atr: s.distSma20Atr,
+
+    stage: s.stage,
+    preScore: s.preScore,
+    tags: s.tags
+  };
+}
+
+/* ===========================
+   Groq AI
+=========================== */
+async function groqChatCompletion({ apiKey, model, messages, maxOut = 420 }) {
+  const url = "https://api.groq.com/openai/v1/chat/completions";
+  const payload = {
+    model,
+    messages,
+    temperature: 0.2,
+    top_p: 0.9,
+    max_completion_tokens: maxOut,
+    response_format: { type: "json_object" }  // 最穩（避免 400）
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type":"application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify(payload)
   });
 
-  const txt = await res.text();
-  let js = null;
-  try{ js = txt ? JSON.parse(txt) : null; }catch(e){}
+  const raw = await res.text();
+  console.log("[Groq] HTTP", res.status, raw);
 
-  if(!res.ok){
-    const err = new Error(`HTTP ${res.status}`);
-    err.status = res.status;
-    err.body = js ?? txt;
-    throw err;
-  }
+  if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw}`);
 
-  // expected: choices[0].message.content is JSON text (or already JSON in some modes)
-  const content = js?.choices?.[0]?.message?.content;
-  const parsed = (typeof content === "string") ? tryParseJsonLoose(content) : (content ?? null);
-  return { raw: js, content, parsed };
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error("Groq 回應不是 JSON"); }
+
+  const content = data?.choices?.[0]?.message?.content ?? "";
+  const cleaned = content.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```$/i,"").trim();
+
+  let obj;
+  try { obj = JSON.parse(cleaned); }
+  catch { throw new Error("模型 content 不是有效 JSON: " + cleaned.slice(0,200)); }
+
+  return obj;
 }
 
-function renderAiReadable(o){
-  const a = o.ai?.data;
-  const err = o.ai?.err;
+function buildAiPrompt(top20Summaries) {
+  const system = `
+你是加密合約「只做多」交易助手。
+目標：從候選列表中挑出最可能在 5~30 分鐘內「向上表態」且「不追價」的標的，並輸出可執行的交易計畫。
+強制要求：
+- 只輸出一個 JSON 物件（不要任何多餘文字、不要 Markdown code fence）
+- 必須輸出 top5 陣列，長度=5（若不足就用 confidence 低但仍補滿）
+- 每個標的必填欄位：symbol, score(0-100), confidence(0-100), eta_minutes("5-15"/"10-30"/"30-60"), stage("蓄勢"/"點火"/"觸發"/"追價風險"), entry, stop, takeProfit[], invalidation, reasons[], risks[]
+- 你只能使用提供的摘要數據（不要假裝看過K線圖）
+- 若資料不足，也要用 swing_low_20 / swing_high_20 / atr14 推出「合理」的 entry/stop/tp
+- 避免追價：若 ret5m_pct 過高或 dist_sma20_atr 過大，stage 請標 "追價風險" 並降低 score/confidence
 
-  if(err){
-    return `<span class="ai-warn">AI錯誤：</span> ${escapeHtml(err)}`;
-  }
-  if(!a){
-    return `<span class="muted">${escapeHtml(o.ai?.text || "尚未分析")}</span>`;
-  }
+entry 格式：
+entry: { type: "limit"|"market"|"stop-limit", zone: [p1,p2], trigger: "文字", logic:"文字" }
+stop 格式：
+stop: { price: number, logic:"文字" }
+takeProfit 格式（2~3 段）：
+takeProfit: [{ price:number, pct:number, logic:"文字" }, ...]  // pct 是出場比例（0-100）
+  `.trim();
 
-  const dir = a.direction || "觀望";
-  const conf = (a.confidence ?? 0);
-  const eta = a.eta_minutes || "-";
-  const stage = a.stage || "-";
-  const score = a.score ?? "-";
+  const user = {
+    mode: "LONG_ONLY",
+    ask: "請從 Top20 候選中選出 Top5（最可能 5~30 分鐘內向上表態且不追價），並給交易計畫。",
+    candidates: top20Summaries
+  };
 
-  const entry = a.entry || {};
-  const stop = a.stop || {};
-  const tp = Array.isArray(a.take_profit) ? a.take_profit : [];
-
-  const reasons = Array.isArray(a.reasons) ? a.reasons : [];
-  const inv = Array.isArray(a.invalidation) ? a.invalidation : [];
-  const risk = Array.isArray(a.risk_notes) ? a.risk_notes : [];
-
-  const dirCls = (dir==="做多") ? "ai-ok" : "ai-warn";
-
-  return `
-    <div><span class="${dirCls}">方向：</span><b>${escapeHtml(dir)}</b>　<span class="muted">｜</span> 分數：<b>${escapeHtml(String(score))}</b>　<span class="muted">｜</span> 信心：<b>${escapeHtml(String(conf))}/100</b></div>
-    <div class="ai-line">預計表態：<b>${escapeHtml(eta)}</b> 分鐘　<span class="muted">｜</span> 階段：<b>${escapeHtml(stage)}</b></div>
-
-    <hr class="my-2 border-zinc-800"/>
-
-    <div class="ai-line"><b>進場：</b>${escapeHtml(entry.type||"-")}　${entry.price? ("@ "+escapeHtml(String(entry.price))) : ""}　<span class="muted">${escapeHtml(entry.zone||"")}</span></div>
-    <div class="ai-line"><b>停損：</b>${stop.price? ("@ "+escapeHtml(String(stop.price))) : "-"}　<span class="muted">${escapeHtml(stop.logic||"")}</span></div>
-
-    <div class="ai-line"><b>止盈：</b>${
-      tp.length ? tp.map(x=>`@${x.price}（${Math.round((x.portion||0)*100)}%）`).join("、") : "-"
-    }</div>
-
-    <div class="ai-line"><b>失效條件：</b>${inv.length ? inv.map(escapeHtml).join("；") : "-"}</div>
-
-    <div class="ai-line"><b>理由：</b>${reasons.length ? reasons.map(escapeHtml).join("；") : "-"}</div>
-
-    <div class="ai-line"><b>風險：</b>${risk.length ? risk.map(escapeHtml).join("；") : "-"}</div>
-
-    <div class="ai-line muted">更新：${fmtTime(o.ai.ts || nowTs())}</div>
-  `;
+  return [
+    { role:"system", content: system },
+    { role:"user", content: JSON.stringify(user) }
+  ];
 }
 
-function escapeHtml(s){
-  return String(s)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+function normalizeAiPick(sym, summary, pick) {
+  // 若 AI 漏欄位：用前端的 swing/atr 填入「保底」值，避免你看到一堆 '-'
+  const price = summary.price || 0;
+  const atr = summary.atr14 || (price * 0.002);
+  const low = summary.swing_low_20 || (price - 2*atr);
+  const high = summary.swing_high_20 || (price + 2*atr);
+
+  const safe = (x, fallback) => (x === null || x === undefined || Number.isNaN(x)) ? fallback : x;
+
+  const out = {
+    symbol: sym,
+    score: clamp(safe(pick.score, summary.preScore || 50), 0, 100),
+    confidence: clamp(safe(pick.confidence, 60), 0, 100),
+    eta_minutes: pick.eta_minutes || "10-30",
+    stage: pick.stage || summary.stage || "蓄勢",
+    direction: "做多",
+
+    entry: pick.entry && typeof pick.entry === "object" ? pick.entry : null,
+    stop: pick.stop && typeof pick.stop === "object" ? pick.stop : null,
+    takeProfit: Array.isArray(pick.takeProfit) ? pick.takeProfit : [],
+    invalidation: pick.invalidation || "",
+    reasons: Array.isArray(pick.reasons) ? pick.reasons : [],
+    risks: Array.isArray(pick.risks) ? pick.risks : [],
+    notes: pick.notes || ""
+  };
+
+  // Fill entry/stop/tp if missing
+  if (!out.entry) {
+    // 蓄勢/點火：偏向 limit zone；觸發：可 market/stop-limit
+    const z1 = price * 0.998;
+    const z2 = price * 0.994;
+    out.entry = {
+      type: (summary.stage === "觸發") ? "market" : "limit",
+      zone: [Number(z1.toFixed(8)), Number(z2.toFixed(8))].sort((a,b)=>a-b),
+      trigger: (summary.stage === "觸發") ? "觸發階段可市價分批進" : "等待回踩/不追價，落入區間分批",
+      logic: "用 5m 主動買差額 + 量能異常 做前置，避免追價"
+    };
+  }
+
+  if (!out.stop) {
+    const stopPrice = low - 0.4 * atr;
+    out.stop = { price: Number(stopPrice.toFixed(8)), logic: "以 swing low_20 下方 + 0.4ATR 作失效點" };
+  }
+
+  if (!out.takeProfit.length) {
+    const tp1 = Math.min(high, price + 1.2*atr);
+    const tp2 = price + 2.2*atr;
+    const tp3 = price + 3.2*atr;
+    out.takeProfit = [
+      { price: Number(tp1.toFixed(8)), pct: 35, logic: "先回收風險" },
+      { price: Number(tp2.toFixed(8)), pct: 35, logic: "趨勢延伸" },
+      { price: Number(tp3.toFixed(8)), pct: 30, logic: "噴出尾段" }
+    ];
+  }
+
+  if (!out.invalidation) out.invalidation = "跌破 stop 或 5m 主動買差額轉負且量能退潮";
+  if (!out.reasons.length) out.reasons = ["候選池異常分數較高（量能/主動買/OI/反追價綜合）"];
+  if (!out.risks.length) out.risks = ["若 5m 漲幅快速擴大屬追價風險，需等回踩再進"];
+
+  return out;
 }
 
-async function analyzeOne(symbol, manual=false){
-  const o = S.data.get(symbol);
-  if(!o) return;
+/* ===========================
+   AI runner (Top20 -> Top5)
+=========================== */
+async function runAIOnce(force=false) {
+  const now = Date.now();
+  if (!force) {
+    if (!AUTO_AI) return;
+    if (now < aiBackoffUntil) return;
+    if (now - lastAiTs < CONFIG.AI_INTERVAL_MS) return;
+  }
 
-  if(!hasKey()){
-    o.ai.err = "未輸入 Groq API Key（上方輸入後按 Save）";
-    o.ai.data = null;
-    o.ai.ts = nowTs();
-    render();
+  // 必須有 Top20 才跑
+  const top20 = candidatesTop20.slice(0, CONFIG.CANDIDATE_LIMIT);
+  if (top20.length < CONFIG.CANDIDATE_LIMIT) {
+    setStatus("aiStatus", `等待 Top20 成形（目前 ${top20.length}）`, "warn");
     return;
   }
 
-  // backoff
-  if(nowTs() < S.backoffUntil){
-    o.ai.err = `AI backoff 中（${Math.ceil((S.backoffUntil-nowTs())/1000)}s）`;
-    o.ai.data = null;
-    o.ai.ts = nowTs();
-    render();
+  // "續力才訪問AI"：至少要有幾個不是冷卻/追價風險
+  const goodCount = top20.map(s => symState[s]).filter(x => x && ["蓄勢","點火","觸發"].includes(x.stage)).length;
+  if (goodCount < 3) {
+    setStatus("aiStatus", `續力不足（蓄勢/點火/觸發 < 3），暫不打AI`, "warn");
     return;
   }
 
-  // “續力才訪問AI”：自動只在 點火/觸發 觸發；手動可強制
-  if(!manual && !(o.stage==="點火" || o.stage==="觸發")){
-    return;
-  }
+  const key = $("aiKey").value.trim();
+  if (!key) { setStatus("aiStatus","缺 Groq Key","bad"); return; }
 
-  o.ai.err = null;
-  o.ai.data = null;
-  o.ai.text = "AI 分析中…";
-  o.ai.ts = nowTs();
-  render();
+  const model = $("modelSel").value;
+  setStatus("aiStatus", "AI 分析中…", "warn");
 
-  setHB("ai");
+  const summaries = top20.map(sym => buildSummary(sym)).filter(Boolean);
 
-  const payload = buildAiPayload(symbol);
+  // 你要知道 AI 吃什麼：這裡就是完整輸入
+  $("debugJSON").textContent = JSON.stringify({ top20: summaries }, null, 2);
 
-  try{
-    const out = await groqCall(payload);
+  try {
+    const messages = buildAiPrompt(summaries);
+    const obj = await groqChatCompletion({ apiKey:key, model, messages, maxOut: 420 });
 
-    if(!out.parsed){
-      o.ai.err = "HTTP 200，但 AI 回覆不是有效 JSON（已要求 JSON 模式）";
-      o.ai.text = out.content ? String(out.content).slice(0,600) : "(empty)";
-      o.ai.data = null;
-    } else {
-      o.ai.data = out.parsed;
-      o.ai.err = null;
-      o.ai.text = "";
+    // expect { top5:[...] }
+    const top5Raw = Array.isArray(obj.top5) ? obj.top5 : [];
+    if (!top5Raw.length) throw new Error("AI JSON 缺 top5");
+
+    // normalize + map by symbol
+    const by = {};
+    const picks = [];
+
+    // 只接受在 top20 內的 symbol；不足就補
+    const top20Set = new Set(top20);
+    for (const p of top5Raw) {
+      const sym = (p.symbol || "").toUpperCase();
+      if (!top20Set.has(sym)) continue;
+      const sum = summaries.find(x => x.symbol === sym) || summaries[0];
+      const norm = normalizeAiPick(sym, sum, p);
+      by[sym] = norm;
+      picks.push(norm);
+      if (picks.length >= CONFIG.TOP5_LIMIT) break;
     }
-    o.ai.ts = nowTs();
-  } catch(e){
-    // rate limit / quota
-    const status = e.status || 0;
-    if(status === 429){
-      // simple backoff
-      S.backoffUntil = nowTs() + 45_000;
-      o.ai.err = "AI 429：請求太密，已自動 backoff 45s";
-    } else if(String(e.message)==="NO_KEY"){
-      o.ai.err = "未輸入 Groq API Key";
-    } else {
-      o.ai.err = `AI 失敗：${e.message || e}`;
+
+    // 若 AI 沒補滿 5 檔：用前端 prescore 補
+    if (picks.length < CONFIG.TOP5_LIMIT) {
+      const remain = summaries
+        .filter(x => !by[x.symbol])
+        .sort((a,b) => (b.preScore||0) - (a.preScore||0));
+      for (const r of remain) {
+        const norm = normalizeAiPick(r.symbol, r, {});
+        by[r.symbol] = norm;
+        picks.push(norm);
+        if (picks.length >= CONFIG.TOP5_LIMIT) break;
+      }
     }
-    o.ai.data = null;
-    o.ai.ts = nowTs();
-  } finally {
-    setHB("on");
-    render();
+
+    // 排序：先用 AI score，再用 confidence
+    picks.sort((a,b) => (b.score - a.score) || (b.confidence - a.confidence));
+
+    aiTop5 = picks;
+    aiBySymbol = by;
+
+    // Pinned #1：除非有更強（分數高很多/信心高很多）才換
+    const top1 = picks[0];
+    if (!pinnedTop1.symbol) {
+      pinnedTop1 = { symbol: top1.symbol, score: top1.score, confidence: top1.confidence, ts: Date.now() };
+    } else {
+      const dt = Date.now() - pinnedTop1.ts;
+      const same = pinnedTop1.symbol === top1.symbol;
+      const stronger = (top1.score >= pinnedTop1.score + 4) || (top1.confidence >= pinnedTop1.confidence + 8);
+      // 至少追蹤 90 秒，除非明顯更強才換
+      if (!same && (stronger || dt > 90*1000)) {
+        pinnedTop1 = { symbol: top1.symbol, score: top1.score, confidence: top1.confidence, ts: Date.now() };
+      }
+    }
+
+    lastAiTs = Date.now();
+    setStatus("aiStatus", `AI OK (${model}) @ ${nowStr()}`, "ok");
+    renderTop5Cards();
+
+  } catch (e) {
+    const msg = String(e?.message || e);
+    console.error(e);
+
+    // backoff for 429
+    if (msg.includes("429")) {
+      aiBackoffUntil = Date.now() + 45*1000;
+      setStatus("aiStatus", "AI 429 限流，backoff 45s", "bad");
+    } else {
+      setStatus("aiStatus", "AI FAIL: " + msg.slice(0,80), "bad");
+    }
   }
 }
 
-async function analyzeTopAuto(manual=false){
-  if(S.top.length < 3) return;
+async function testAI() {
+  const key = $("aiKey").value.trim();
+  if (!key) return alert("請先輸入 Groq API Key");
+  const model = $("modelSel").value;
 
-  // cooldown
-  if(!manual && (nowTs() - S.lastAutoAiAt < AUTO_AI_COOLDOWN_MS)) return;
-
-  // only analyze best 3 in Top5
-  const list = [...S.top]
-    .sort((a,b)=>b.score-a.score)
-    .slice(0,3)
-    .map(x=>x.symbol);
-
-  // “續力才訪問AI”：至少有一支在點火/觸發才跑
-  if(!manual){
-    const ok = list.some(sym => {
-      const o = S.data.get(sym);
-      return o && (o.stage==="點火" || o.stage==="觸發");
+  try {
+    setStatus("aiStatus", "Test AI…", "warn");
+    const obj = await groqChatCompletion({
+      apiKey: key,
+      model,
+      maxOut: 200,
+      messages: [
+        { role:"system", content:"只輸出 JSON 物件，不要任何多餘文字。" },
+        { role:"user", content: JSON.stringify({ ping:"pong", now: Date.now() }) }
+      ]
     });
-    if(!ok) return;
-  }
-
-  S.lastAutoAiAt = nowTs();
-  for(const sym of list){
-    await analyzeOne(sym, true);
-  }
-}
-
-/* =========================
-   UI EVENTS
-========================= */
-
-function loadKey(){
-  const k = localStorage.getItem("TRIDENT_GROQ_KEY") || "";
-  if(k){
-    S.apiKey = k;
-    document.getElementById("apiKey").value = k;
-  }
-  const m = localStorage.getItem("TRIDENT_GROQ_MODEL") || "";
-  if(m){
-    S.model = m;
-    document.getElementById("modelSel").value = m;
-  }
-  const a = localStorage.getItem("TRIDENT_AUTO_AI");
-  if(a!=null){
-    S.autoAI = (a === "1");
-    document.getElementById("autoAI").checked = S.autoAI;
+    console.log("Test AI OK:", obj);
+    setStatus("aiStatus", `Test OK (${model})`, "ok");
+    alert("Test AI OK（看 Console）");
+  } catch (e) {
+    console.error(e);
+    setStatus("aiStatus", "Test FAIL", "bad");
+    alert("Test AI FAIL: " + (e?.message || e));
   }
 }
 
-document.getElementById("btnSaveKey").onclick = ()=>{
-  const v = document.getElementById("apiKey").value.trim();
-  if(v.length < 10){
-    alert("Key 太短或空的");
-    return;
+/* ===========================
+   Render: Top5 cards (AI selected)
+=========================== */
+function stageClass(stage) {
+  if (stage === "蓄勢") return "stage-setup";
+  if (stage === "點火") return "stage-ignite";
+  if (stage === "觸發") return "stage-confirm";
+  if (stage === "追價風險") return "stage-chase";
+  return "stage-cool";
+}
+
+function renderTop5Cards() {
+  $("top5N").textContent = aiTop5.length;
+  $("pinnedSym").textContent = pinnedTop1.symbol || "-";
+
+  const wrap = $("cards");
+  wrap.innerHTML = "";
+
+  const pinned = pinnedTop1.symbol;
+
+  // 讓 pinned #1 固定排第一（除非 AI top1 就是它）
+  let list = [...aiTop5];
+  if (pinned) {
+    const idx = list.findIndex(x => x.symbol === pinned);
+    if (idx > 0) {
+      const t = list.splice(idx,1)[0];
+      list.unshift(t);
+    }
   }
-  S.apiKey = v;
-  localStorage.setItem("TRIDENT_GROQ_KEY", v);
-  alert("已儲存 Groq Key（存在你的瀏覽器 localStorage）");
-};
 
-document.getElementById("btnClearKey").onclick = ()=>{
-  S.apiKey = "";
-  document.getElementById("apiKey").value = "";
-  localStorage.removeItem("TRIDENT_GROQ_KEY");
-  alert("已清除 Key");
-};
+  for (const p of list) {
+    const s = symState[p.symbol];
+    const sum = s ? buildSummary(p.symbol) : null;
+    const isTop1 = (p.symbol === pinned);
 
-document.getElementById("modelSel").onchange = (e)=>{
-  S.model = e.target.value;
-  localStorage.setItem("TRIDENT_GROQ_MODEL", S.model);
-  render();
-};
+    const card = document.createElement("div");
+    card.className = `card p-4 ${isTop1 ? "card-top1" : ""}`;
 
-document.getElementById("autoAI").onchange = (e)=>{
-  S.autoAI = e.target.checked;
-  localStorage.setItem("TRIDENT_AUTO_AI", S.autoAI ? "1":"0");
-};
+    const tags = (sum?.tags || []).slice(0,6).map(t => `<span class="badge px-2 py-1 rounded-lg tiny2">${t}</span>`).join(" ");
+    const stage = sum?.stage || p.stage || "-";
 
-document.getElementById("btnTestAI").onclick = async ()=>{
-  // just analyze champion if exists else first deep
-  const sym = S.champion.symbol || S.deepList[0];
-  if(!sym){ alert("尚未有候選幣"); return; }
-  await analyzeOne(sym, true);
-  if(S.data.get(sym)?.ai?.err) alert("Test AI FAIL：" + S.data.get(sym).ai.err);
-  else alert("Test AI OK（看右側 AI 區）");
-};
+    // left: numbers
+    const left = `
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-white font-black text-xl">${p.symbol}</div>
+          <div class="tiny muted mt-1">
+            價格: <b class="text-zinc-200">${fmt(sum?.price, 6)}</b>
+            <span class="mx-2 muted">|</span>
+            5m漲跌: <b class="${(sum?.ret5m_pct||0)>=0 ? "ok":"bad"}">${fmt(sum?.ret5m_pct,2)}%</b>
+            <span class="mx-2 muted">|</span>
+            前端分: <b>${fmt(sum?.preScore,0)}</b>
+          </div>
+          <div class="tiny mt-2 ${stageClass(stage)} font-bold">階段：${stage}</div>
+        </div>
 
-document.getElementById("btnAnalyzeTop").onclick = async ()=>{
-  await analyzeTopAuto(true);
-};
+        <div class="flex gap-2">
+          <button class="btn tiny btn-blue" onclick="analyzeSingle('${p.symbol}')">AI 重分析</button>
+        </div>
+      </div>
 
-document.getElementById("btnReset").onclick = ()=>{
-  location.reload();
-};
+      <div class="mt-3 flex flex-wrap gap-2">${tags || `<span class="muted tiny">tags: -</span>`}</div>
 
-/* =========================
-   MAIN LOOP
-========================= */
+      <div class="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div class="kv tiny">量能Z(5m): <b>${fmt(sum?.volZ_5m,2)}</b></div>
+        <div class="kv tiny">主動買差額(5m): <b>${fmt(sum?.active_buy_delta_5m_notional,0)}</b></div>
+        <div class="kv tiny">主動買入比(5m): <b>${fmt(((sum?.active_buy_imbalance_5m ?? null)===null)?null:(0.5 + (sum.active_buy_imbalance_5m/2)),3)}</b></div>
 
-async function loop(){
-  try{
-    // initial
-    if(!S.universe.length){
-      await fastScan();
-      await deepScan();
-      render();
-    }
+        <div class="kv tiny">OIΔ(5m): <b>${fmt(sum?.oi_delta_5m,2)}</b></div>
+        <div class="kv tiny">OIΔ(4h): <b>${fmt(sum?.oi_delta_4h,2)}</b></div>
+        <div class="kv tiny">資金費率(%): <b>${fmt(sum?.funding_pct,3)}</b> / premium(%): <b>${fmt(sum?.premium_pct,3)}</b></div>
 
-    // fast refresh
-    if(nowTs() - S.lastFastAt > FAST_REFRESH_MS){
-      await fastScan();
-    }
+        <div class="kv tiny">ATR14: <b>${fmt(sum?.atr14,6)}</b></div>
+        <div class="kv tiny">SwingLow20: <b>${fmt(sum?.swing_low_20,6)}</b></div>
+        <div class="kv tiny">SwingHigh20: <b>${fmt(sum?.swing_high_20,6)}</b></div>
 
-    // deep refresh
-    if(nowTs() - S.lastDeepAt > DEEP_REFRESH_MS){
-      await deepScan();
-    }
+        <div class="kv tiny">Range20(%): <b>${fmt(sum?.range_20_pct,2)}</b></div>
+        <div class="kv tiny">distSMA20/ATR: <b>${fmt(sum?.dist_sma20_atr,2)}</b></div>
+        <div class="kv tiny">SMA20: <b>${fmt(sum?.sma20,6)}</b></div>
+      </div>
+    `;
 
-    // auto AI
-    if(S.autoAI){
-      await analyzeTopAuto(false);
-    }
+    // right: AI text
+    const tpText = (p.takeProfit || []).slice(0,3).map(tp => {
+      return `TP ${fmt(tp.price,6)}（${fmt(tp.pct,0)}%）`;
+    }).join(" / ");
 
-    setStatus("運作中");
-    updateHeaderCounts();
-  } catch(e){
-    setStatus("錯誤：" + (e.message || e));
-  } finally {
-    setTimeout(loop, 1500);
+    const reasons = (p.reasons||[]).slice(0,4).map(x=>`• ${x}`).join("\n") || "• -";
+    const risks = (p.risks||[]).slice(0,4).map(x=>`• ${x}`).join("\n") || "• -";
+
+    const entryZone = p.entry?.zone ? `${fmt(p.entry.zone[0],6)} ~ ${fmt(p.entry.zone[1],6)}` : "-";
+    const aiBox = `
+      <div class="ai-box">
+        <div class="flex items-center justify-between">
+          <div class="text-white font-bold">AI 建議（中文）</div>
+          <div class="tiny muted">模型：${$("modelSel").value}</div>
+        </div>
+
+        <div class="mt-2 tiny">
+          方向：<b class="ok">做多</b>
+          <span class="mx-2 muted">|</span>
+          分數：<b>${fmt(p.score,0)}</b>
+          <span class="mx-2 muted">|</span>
+          信心：<b>${fmt(p.confidence,0)}/100</b>
+        </div>
+
+        <div class="mt-1 tiny">
+          ETA：<b>${p.eta_minutes || "-"}</b>
+          <span class="mx-2 muted">|</span>
+          階段：<b class="${stageClass(p.stage)}">${p.stage || "-"}</b>
+        </div>
+
+        <div class="hr my-2"></div>
+
+        <div class="tiny"><b>進場</b>：${p.entry?.type || "-"} | 區間：<b>${entryZone}</b></div>
+        <div class="tiny muted">觸發：${p.entry?.trigger || "-"}</div>
+
+        <div class="mt-1 tiny"><b>停損</b>：<b class="bad">${fmt(p.stop?.price,6)}</b></div>
+        <div class="tiny muted">失效：${p.invalidation || "-"}</div>
+
+        <div class="mt-1 tiny"><b>止盈</b>：${tpText || "-"}</div>
+
+        <div class="hr my-2"></div>
+        <div class="tiny"><b>理由</b>：</div>
+        <pre class="tiny2 whitespace-pre-wrap muted">${reasons}</pre>
+        <div class="tiny"><b>風險</b>：</div>
+        <pre class="tiny2 whitespace-pre-wrap muted">${risks}</pre>
+
+        <div class="tiny muted mt-2">更新：${nowStr()}</div>
+      </div>
+    `;
+
+    card.innerHTML = `
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div>${left}</div>
+        <div>${aiBox}</div>
+      </div>
+    `;
+
+    wrap.appendChild(card);
   }
 }
 
-(async function boot(){
+async function analyzeSingle(sym) {
+  const key = $("aiKey").value.trim();
+  if (!key) return alert("請先輸入 Groq API Key");
+  const model = $("modelSel").value;
+
+  const sum = buildSummary(sym);
+  if (!sum) return alert("資料尚未就緒");
+
+  setStatus("aiStatus", `AI 單幣分析中: ${sym}`, "warn");
+
+  const messages = [
+    {
+      role:"system",
+      content: `
+你是加密合約「只做多」交易助手。只輸出 JSON 物件，不要任何多餘文字。
+必填：symbol, score, confidence, eta_minutes, stage, entry, stop, takeProfit, invalidation, reasons, risks
+`.trim()
+    },
+    { role:"user", content: JSON.stringify({ mode:"LONG_ONLY", candidate: sum }) }
+  ];
+
+  try {
+    const obj = await groqChatCompletion({ apiKey:key, model, messages, maxOut: 360 });
+
+    // obj 可能就是單一 pick 或包在 {pick:...}
+    const pickRaw = obj.pick || obj;
+    const norm = normalizeAiPick(sym, sum, pickRaw);
+
+    aiBySymbol[sym] = norm;
+
+    // 若此幣在 top5 內，更新它；不在就不動榜
+    const idx = aiTop5.findIndex(x => x.symbol === sym);
+    if (idx >= 0) aiTop5[idx] = norm;
+
+    setStatus("aiStatus", `AI OK: ${sym}`, "ok");
+    renderTop5Cards();
+  } catch (e) {
+    console.error(e);
+    setStatus("aiStatus", "AI FAIL: " + (e?.message || e).slice(0,80), "bad");
+    alert("AI FAIL: " + (e?.message || e));
+  }
+}
+
+/* ===========================
+   Global miniTicker (heartbeat)
+=========================== */
+function startMiniTicker() {
+  // 這個只是保活 + 顯示 Binance OK，不靠它算指標（指標靠 aggTrade + REST）
+  const ws = new WebSocket("wss://fstream.binance.com/ws/!miniTicker@arr");
+  wsMini = ws;
+
+  ws.onopen = () => {
+    $("hb").classList.add("hb-on");
+    setStatus("binStatus","miniTicker OK","ok");
+  };
+  ws.onerror = () => setStatus("binStatus","miniTicker error","warn");
+  ws.onclose = () => {
+    setStatus("binStatus","miniTicker closed","warn");
+    setTimeout(() => startMiniTicker(), 1200);
+  };
+  ws.onmessage = () => {
+    $("lastTick").textContent = nowStr();
+  };
+}
+
+/* ===========================
+   Main loops
+=========================== */
+async function boot() {
   loadKey();
-  setStatus("啟動中…");
-  setHB("off");
-  await fastScan();
-  await deepScan();
-  computeTop5();
-  trimWsToTop5();
-  render();
-  loop();
-})();
-</script>
+  $("autoLbl").textContent = `Auto AI: ${AUTO_AI ? "ON" : "OFF"}`;
 
+  setStatus("binStatus","初始化…","warn");
+  setStatus("aiStatus","-","muted");
+
+  startMiniTicker();
+
+  // initial
+  await refreshPremiumAll().catch(()=>{});
+  await refreshUniverse().catch(e => console.error(e));
+
+  // periodic premium
+  setInterval(() => refreshPremiumAll().catch(()=>{}), 60*1000);
+
+  // universe refresh
+  setInterval(() => refreshUniverse().catch(()=>{}), CONFIG.UNIVERSE_REFRESH_MS);
+
+  // candidate selection refresh
+  setInterval(() => {
+    buildTop20Candidates();
+    // 如果 AI 之前已經有 top5，就持續渲染（即使不跑AI）
+    if (aiTop5.length) renderTop5Cards();
+  }, CONFIG.CANDIDATE_REFRESH_MS);
+
+  // OI refresh for candidates (每 60s)
+  setInterval(() => {
+    for (const sym of candidatesTop20) {
+      ensureKlinesAndOI(sym);
+    }
+  }, 60*1000);
+
+  // auto AI
+  setInterval(() => runAIOnce(false), 1500);
+
+  // first AI soon after candidates ready
+  setTimeout(() => runAIOnce(true), 8000);
+}
+
+// start
+boot();
+</script>
 </body>
 </html>

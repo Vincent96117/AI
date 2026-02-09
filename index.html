@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TRIDENT V7.4 - Precise TP + Hide/Replace</title>
+  <title>TRIDENT V7.5 - 5K Swing Mode</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
@@ -43,14 +43,13 @@
 </head>
 
 <body class="p-4">
-  <!-- Top Bar -->
   <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
     <div class="flex items-center gap-3">
       <span id="hb" class="heartbeat"></span>
       <div>
-        <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7.4</span></div>
+        <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7.5</span></div>
         <div class="tiny muted font-bold tracking-widest uppercase">
-          LONG ONLY / 精準止盈(R+阻力) / ✅釘選 / ✅搜尋上榜 / ✅單幣AI更新 / ✅🗑不看替補 / 排除 XAU XAG 外匯 / 排除大幣
+          LONG ONLY / 5K小波段模式 / 熱機12min / TP floor: 1.3R/2.6R/4.0R / ✅釘選 ✅搜尋上榜 ✅單幣AI更新 ✅🗑不看替補
         </div>
       </div>
     </div>
@@ -75,7 +74,6 @@
     </div>
   </div>
 
-  <!-- Status -->
   <div class="mt-3 panel rounded-xl p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
     <div class="flex flex-wrap items-center gap-3 tiny">
       <span class="badge px-2 py-1 rounded-lg">Universe: <b id="universeN">-</b></span>
@@ -91,7 +89,7 @@
     </div>
 
     <div class="tiny muted">
-      Top10 滿才自動送 AI（每 2 分鐘）。🗑 不看 = 加入黑名單，會自動補位。
+      5K小波段：候選需「熱機 >=12min + 至少3個5m bucket」才會進 Top10 / 送AI。
     </div>
   </div>
 
@@ -112,7 +110,7 @@
 
 <script>
 /* ===========================
-   CONFIG
+   CONFIG (V7.5 5K Swing Mode)
 =========================== */
 const CONFIG = {
   LONG_ONLY: true,
@@ -128,13 +126,19 @@ const CONFIG = {
   AI_INPUT_SIZE: 10,
   MIN_AI_POOL: 10,
 
+  // ✅ 5K小波段：熱機 12min + 至少3個5m bucket(=15min) 才算穩
+  WARMUP_MIN_MS: 12 * 60 * 1000,
+  MIN_HIST_BUCKETS: 3,
+
   ROLL_5M_MS: 5 * 60 * 1000,
   BUCKET_5M_MS: 5 * 60 * 1000,
   HIST_5M_BUCKETS: 48,
 
-  KLINES_1M_LIMIT: 60,
+  // ✅ 5K：改用 5m klines 做 ATR/swing/SMA（更像波段）
+  KLINES_INTERVAL: "5m",
+  KLINES_LIMIT: 240, // 240根5m=20小時，足夠穩
   ATR_PERIOD: 14,
-  SWING_WINDOW: 20,
+  SWING_WINDOW: 24,  // 24根5m=2小時（可依你習慣改48=4小時）
 
   VP_5M_LIMIT: 288,
   VP_REFRESH_MS: 2 * 60 * 1000,
@@ -158,7 +162,9 @@ const CONFIG = {
     replaceMargin: 3,
   },
 
-  // 近似用固定清單排除大市值幣（你指定不要 top25）
+  // ✅ 5K波段 TP floor（更遠、避免太近）
+  TP_K: [1.3, 2.6, 4.0],
+
   TOPCAP_EXCLUDE: [
     "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","TONUSDT",
     "AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","POLUSDT","SHIBUSDT","1000SHIBUSDT",
@@ -166,7 +172,6 @@ const CONFIG = {
     "NEARUSDT","ARBUSDT","OPUSDT"
   ],
 
-  // 排除外匯/金銀（USDT 永續裡常見的前綴）
   FX_COMMODITY_PREFIX: [
     "XAU","XAG","EUR","GBP","AUD","JPY","CHF","CAD","NZD",
     "BRL","TRY","RUB","ZAR","MXN","PLN","SEK","NOK","DKK","HKD","SGD"
@@ -304,7 +309,7 @@ function togglePin(sym) {
 }
 
 /* ===========================
-   DELETE/HIDE (blacklist) + auto replace
+   DELETE/HIDE + auto replace
 =========================== */
 function backfillTop5Placeholder() {
   const exist = new Set(aiTop5.map(x => x.symbol));
@@ -317,7 +322,7 @@ function backfillTop5Placeholder() {
 
   while (aiTop5.length < CONFIG.TOP5_LIMIT && pool.length) {
     const sum = pool.shift();
-    const ph = normalizeAiPick(sum.symbol, sum, { score: sum.preScore, confidence: 50, eta_minutes: "10-30", stage: sum.stage });
+    const ph = normalizeAiPick(sum.symbol, sum, { score: sum.preScore, confidence: 50, eta_minutes: "30-60", stage: sum.stage });
     aiBySymbol[sum.symbol] = ph;
     aiTop5.push(ph);
   }
@@ -436,7 +441,7 @@ async function refreshUniverse() {
 
   const filtered = tickers
     .filter(t => t.symbol.endsWith("USDT"))
-    .filter(t => !hiddenSet.has(t.symbol))                 // ✅ 不看 = 排除
+    .filter(t => !hiddenSet.has(t.symbol))
     .filter(t => allowedPerpSet ? allowedPerpSet.has(t.symbol) : true)
     .filter(t => !ex.has(t.symbol))
     .filter(t => !isFxCommodity(t.symbol))
@@ -446,7 +451,7 @@ async function refreshUniverse() {
     .map(x => x.symbol);
 
   for (const sym of Array.from(manualIncludeSet)) {
-    if (hiddenSet.has(sym)) continue;                      // ✅ 不看 = 不回來
+    if (hiddenSet.has(sym)) continue;
     if (allowedPerpSet && !allowedPerpSet.has(sym)) continue;
     if (CONFIG.TOPCAP_EXCLUDE.includes(sym)) continue;
     if (CONFIG.EXCLUDE_EXTRA.includes(sym)) continue;
@@ -643,14 +648,15 @@ function computeCrossSectionZ() {
 }
 
 /* ===========================
-   OI + 1m klines + Today VP
+   OI + klines (5m) + Today VP
 =========================== */
 async function ensureKlinesAndOI(sym) {
   const s = symState[sym];
   if (!s) return;
 
+  // ✅ 改成 5m klines
   try {
-    const k = await fetchJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1m&limit=${CONFIG.KLINES_1M_LIMIT}`);
+    const k = await fetchJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${CONFIG.KLINES_INTERVAL}&limit=${CONFIG.KLINES_LIMIT}`);
     computeKlineFeatures(sym, k);
   } catch {}
 
@@ -943,7 +949,6 @@ function updateTrackedTopN(eligibleStates) {
     }
   }
 
-  enforcePinnedLimit();
   if (trackedTopN.length > keepN) {
     const pinnedArr = trackedTopN.filter(x => pinnedSet.has(x));
     const others = trackedTopN.filter(x => !pinnedSet.has(x)).sort((a,b)=>scoreOf(b)-scoreOf(a));
@@ -952,7 +957,7 @@ function updateTrackedTopN(eligibleStates) {
 }
 
 /* ===========================
-   Candidate selection
+   Candidate selection (with warmup gates)
 =========================== */
 function buildTrackedTopN() {
   computeCrossSectionZ();
@@ -965,6 +970,10 @@ function buildTrackedTopN() {
     .filter(sym => !isFxCommodity(sym))
     .map(sym => symState[sym])
     .filter(s => s && s.price !== null)
+    // ✅ 熱機門檻：>=12min + 至少3個bucket + klinesReady
+    .filter(s => (Date.now() - s.firstSeenTs) >= CONFIG.WARMUP_MIN_MS)
+    .filter(s => (s.histBuckets ?? 0) >= CONFIG.MIN_HIST_BUCKETS)
+    .filter(s => s.klinesReady === true)
     .filter(s => {
       const T = CONFIG.THRESH;
       const longBias = (s.delta5mNotional !== null && s.delta5mNotional > 0) &&
@@ -1038,12 +1047,16 @@ function buildSummary(sym) {
 
     stage: s.stage,
     preScore: s.preScore,
-    tags: s.tags
+    tags: s.tags,
+
+    // ✅ 讓 AI 知道這是 5K 波段資料
+    kline_interval: CONFIG.KLINES_INTERVAL,
+    warmup_minutes: Math.floor((Date.now() - s.firstSeenTs)/60000)
   };
 }
 
 /* ===========================
-   ✅ Precise TP algorithm (R + resistances)
+   ✅ Precise TP algorithm (R + resistances + Swing floors)
 =========================== */
 function uniqNums(arr) {
   const out = [];
@@ -1062,7 +1075,6 @@ function computePreciseTPs(summary, entry, stop) {
   const price = summary.price || 0;
   const atr = (summary.atr14 && summary.atr14 > 0) ? summary.atr14 : Math.max(price * 0.002, 1e-12);
 
-  // entry_mid
   let entryMid = price;
   if (entry && Array.isArray(entry.zone) && entry.zone.length === 2) {
     entryMid = (Number(entry.zone[0]) + Number(entry.zone[1])) / 2;
@@ -1078,18 +1090,14 @@ function computePreciseTPs(summary, entry, stop) {
   const vp = summary.today_vp;
   if (vp?.poc) resist.push(Number(vp.poc));
   if (vp?.vah) resist.push(Number(vp.vah));
-  if (Array.isArray(vp?.top_nodes)) {
-    for (const n of vp.top_nodes) {
-      if (n?.price) resist.push(Number(n.price));
-    }
-  }
+  if (Array.isArray(vp?.top_nodes)) for (const n of vp.top_nodes) if (n?.price) resist.push(Number(n.price));
   if (summary.swing_high_20) resist.push(Number(summary.swing_high_20));
 
   const resistUp = uniqNums(resist)
     .filter(x => isFinite(x) && x > entryMid)
     .sort((a,b)=>a-b);
 
-  const ks = [1.0, 2.0, 3.0];
+  const ks = CONFIG.TP_K; // ✅ 5K波段 floor
   const targets = [];
 
   for (let i=0; i<3; i++) {
@@ -1097,12 +1105,8 @@ function computePreciseTPs(summary, entry, stop) {
     let t = resistUp.find(x => x >= floor);
     if (!t) t = floor;
 
-    if (i > 0 && t < targets[i-1] + minStep) {
-      t = targets[i-1] + minStep;
-    }
-
-    // 仍然不能太貼（用 atr 再防呆）
-    if (t < entryMid + Math.max(0.9*R, 0.6*atr)) t = entryMid + Math.max(0.9*R, 0.6*atr);
+    if (i > 0 && t < targets[i-1] + minStep) t = targets[i-1] + minStep;
+    if (t < entryMid + Math.max(ks[0]*R, 0.6*atr)) t = entryMid + Math.max(ks[0]*R, 0.6*atr);
 
     targets.push(t);
   }
@@ -1111,9 +1115,9 @@ function computePreciseTPs(summary, entry, stop) {
     entryMid,
     R,
     tps: [
-      { price: Number(targets[0].toFixed(12)), pct: 35, logic: `TP1 ≥ 1R，優先對齊阻力(VP/節點/高點)，R=${R.toFixed(6)}` },
-      { price: Number(targets[1].toFixed(12)), pct: 35, logic: `TP2 ≥ 2R，若 VAH/前高更遠則採阻力價` },
-      { price: Number(targets[2].toFixed(12)), pct: 30, logic: `TP3 ≥ 3R，趨勢延伸段，可改追蹤止損` }
+      { price: Number(targets[0].toFixed(12)), pct: 35, logic: `TP1 ≥ ${ks[0]}R，優先對齊阻力(VP/節點/前高)，R=${R.toFixed(6)}` },
+      { price: Number(targets[1].toFixed(12)), pct: 35, logic: `TP2 ≥ ${ks[1]}R，優先對齊更遠阻力或延伸` },
+      { price: Number(targets[2].toFixed(12)), pct: 30, logic: `TP3 ≥ ${ks[2]}R，波段延伸段（可改追蹤止損）` }
     ]
   };
 }
@@ -1157,31 +1161,31 @@ async function groqChatCompletion({ apiKey, model, messages, maxOut = 400 }) {
 }
 
 /* ===========================
-   AI prompts (force precise TP)
+   AI prompts (swing ETA + TP floors)
 =========================== */
 function buildAiPrompt(top10Summaries) {
   const system = `
 你是加密合約「只做多」交易助手。請全部用中文輸出。
 你只看到輸入摘要（不可假裝看K線圖/深度/新聞）。
-任務：從 candidates(10) 中選出 top5，找「5~30分鐘內可能向上表態」且「不追價」。
+任務：從 candidates(10) 中選出 top5，找「10~60分鐘內可能向上表態」且「不追價」，偏 5K 小波段。
 
 【精準止盈硬規則（必須遵守）】
 定義：
 - entry_mid = (entry.zone[0]+entry.zone[1])/2（若 market 用 current.price）
 - R = entry_mid - stop.price（做多，R 必須 > 0）
 阻力集合（只取 entry_mid 上方）：today_vp.poc、today_vp.vah、today_vp.top_nodes[].price、swing_high_20
-規則：
-- TP1 必須 >= entry_mid + 1.0R
-- TP2 必須 >= entry_mid + 2.0R
-- TP3 必須 >= entry_mid + 3.0R
+規則（5K波段 floor）：
+- TP1 必須 >= entry_mid + 1.3R
+- TP2 必須 >= entry_mid + 2.6R
+- TP3 必須 >= entry_mid + 4.0R
 - 每段 TP 間距 >= max(0.6R, 0.5*atr14)
 選價：
-- 先算 floor_i = entry_mid + k_i*R (k=1,2,3)
+- 先算 floor_i = entry_mid + k_i*R (k=1.3,2.6,4.0)
 - 在阻力集合中找第一個 >= floor_i 的阻力價，有則用阻力價；否則用 floor_i
-- 並在 reasons / takeProfit.logic 寫出：用到哪個阻力或用到 R 倍數
+- 並在 takeProfit.logic 寫出：用到哪個阻力或用到 R 倍數
 
 【不追價】
-若 ret5m_pct 過高或 dist_sma20_atr 太大，要建議等待回踩型的 limit zone，不可給「貼近現價」的 TP。
+若 ret5m_pct 過高或 dist_sma20_atr 太大，entry 必須改為等待回踩的 limit zone，不可追價。
 
 輸出必須是單一 JSON 物件（不要任何多餘文字）。
 JSON 格式：
@@ -1191,7 +1195,7 @@ JSON 格式：
       "symbol":"XXXUSDT",
       "score":0-100,
       "confidence":0-100,
-      "eta_minutes":"5-15"|"10-30"|"30-60",
+      "eta_minutes":"10-30"|"30-60"|"60-120",
       "stage":"蓄勢"|"點火"|"觸發"|"追價風險",
       "entry":{"type":"limit"|"market","zone":[low,high],"trigger":"...","logic":"..."},
       "stop":{"price":number,"logic":"..."},
@@ -1206,7 +1210,7 @@ JSON 格式：
 
   const user = {
     mode: "LONG_ONLY",
-    note: "候選已排除 XAU/XAG/外匯、也排除大幣；請專注小中型合約。",
+    note: "候選已排除 XAU/XAG/外匯、也排除大幣；資料屬 5K 小波段。",
     candidates: top10Summaries
   };
 
@@ -1220,16 +1224,16 @@ function buildAiPromptSingle(symbol, currentSummary, prevAdvice) {
   const system = `
 你是加密合約「只做多」交易助手。請全部用中文輸出。
 你會收到 current（最新摘要）與 previous（上一次建議）。
-任務：針對同一幣種，基於 current 與 previous 的差異，輸出更新後的建議。
+任務：針對同一幣種，基於 current 與 previous 的差異，輸出更新後的建議（偏 5K 小波段）。
 必須給：score/confidence/eta_minutes/entry/stop/takeProfit/invalidation/reasons/risks
 
 【精準止盈硬規則（必須遵守）】
 - entry_mid = (entry.zone[0]+entry.zone[1])/2（若 market 用 current.price）
 - R = entry_mid - stop.price（做多 R>0）
 阻力集合：today_vp.poc、today_vp.vah、today_vp.top_nodes[].price、swing_high_20（僅取 entry_mid 上方）
-- TP1 >= entry_mid + 1R
-- TP2 >= entry_mid + 2R
-- TP3 >= entry_mid + 3R
+- TP1 >= entry_mid + 1.3R
+- TP2 >= entry_mid + 2.6R
+- TP3 >= entry_mid + 4.0R
 - TP 間距 >= max(0.6R, 0.5*atr14)
 選價：用阻力價優先，否則用 R 倍數 floor；並在 logic 寫明依據。
 
@@ -1239,7 +1243,7 @@ function buildAiPromptSingle(symbol, currentSummary, prevAdvice) {
   "symbol":"XXXUSDT",
   "score":0-100,
   "confidence":0-100,
-  "eta_minutes":"5-15"|"10-30"|"30-60",
+  "eta_minutes":"10-30"|"30-60"|"60-120",
   "stage":"蓄勢"|"點火"|"觸發"|"追價風險",
   "entry":{"type":"limit"|"market","zone":[low,high],"trigger":"...","logic":"..."},
   "stop":{"price":number,"logic":"..."},
@@ -1250,12 +1254,7 @@ function buildAiPromptSingle(symbol, currentSummary, prevAdvice) {
 }
   `.trim();
 
-  const user = {
-    mode: "LONG_ONLY",
-    symbol,
-    current: currentSummary,
-    previous: prevAdvice || null
-  };
+  const user = { mode:"LONG_ONLY", symbol, current: currentSummary, previous: prevAdvice || null };
 
   return [
     { role:"system", content: system },
@@ -1272,7 +1271,7 @@ function stageClass(stage) {
 }
 
 /* ===========================
-   Normalize (force TP by algorithm if AI too close)
+   Normalize (force TP by algorithm if too close)
 =========================== */
 function normalizeAiPick(sym, summary, pick) {
   const price = summary.price || 0;
@@ -1284,7 +1283,7 @@ function normalizeAiPick(sym, summary, pick) {
     symbol: sym,
     score: clamp(safe(pick.score, summary.preScore || 50), 0, 100),
     confidence: clamp(safe(pick.confidence, 60), 0, 100),
-    eta_minutes: pick.eta_minutes || "10-30",
+    eta_minutes: pick.eta_minutes || "30-60",
     stage: pick.stage || summary.stage || "蓄勢",
     direction: "做多",
 
@@ -1296,7 +1295,6 @@ function normalizeAiPick(sym, summary, pick) {
     risks: Array.isArray(pick.risks) ? pick.risks : [],
   };
 
-  // entry default
   if (!out.entry) {
     const vp = summary.today_vp;
     const z1 = vp?.val ? vp.val : (price - 0.8*atr);
@@ -1306,35 +1304,32 @@ function normalizeAiPick(sym, summary, pick) {
       type: (summary.stage === "觸發") ? "market" : "limit",
       zone: [Number(lo.toFixed(12)), Number(hi.toFixed(12))],
       trigger: (summary.stage === "觸發") ? "觸發階段可市價分批進" : "等待回踩進入區間分批，不追價",
-      logic: "用量能/主動買差額續力 + 回踩到 VP/ATR 支撐區"
+      logic: "5K波段：續力 + 回踩到 VP/ATR 支撐區"
     };
   }
 
-  // stop default
   if (!out.stop) {
     const low = summary.swing_low_20 || (price - 2*atr);
     const stopPrice = (low - 0.4 * atr);
-    out.stop = { price: Number(stopPrice.toFixed(12)), logic: "swing_low_20 下方 + 0.4ATR 作失效點" };
+    out.stop = { price: Number(stopPrice.toFixed(12)), logic: "5K swing low 下方 + 0.4ATR 作失效點" };
   } else {
     out.stop.price = Number(out.stop.price);
   }
 
-  // ✅ Force precise TPs if missing OR too close
   const tpNeedFix = (() => {
     if (!out.takeProfit || out.takeProfit.length < 3) return true;
     const entryMid = (out.entry?.zone?.length === 2) ? ((Number(out.entry.zone[0]) + Number(out.entry.zone[1]))/2) : price;
     const R = entryMid - Number(out.stop?.price);
     if (!isFinite(R) || R <= 0) return true;
 
+    const ks = CONFIG.TP_K;
     const tps = out.takeProfit.map(x => Number(x.price)).filter(x=>isFinite(x)).sort((a,b)=>a-b);
     if (tps.length < 3) return true;
 
-    // TP1 >= entry+1R, TP2 >= entry+2R, TP3 >= entry+3R
-    if (tps[0] < entryMid + 1.0*R) return true;
-    if (tps[1] < entryMid + 2.0*R) return true;
-    if (tps[2] < entryMid + 3.0*R) return true;
+    if (tps[0] < entryMid + ks[0]*R) return true;
+    if (tps[1] < entryMid + ks[1]*R) return true;
+    if (tps[2] < entryMid + ks[2]*R) return true;
 
-    // spacing
     const minStep = Math.max(0.6*R, 0.5*(summary.atr14 || atr || 0));
     if (tps[1] - tps[0] < minStep) return true;
     if (tps[2] - tps[1] < minStep) return true;
@@ -1346,9 +1341,8 @@ function normalizeAiPick(sym, summary, pick) {
     const tpPack = computePreciseTPs(summary, out.entry, out.stop);
     out.takeProfit = tpPack.tps;
     out.reasons = (out.reasons || []);
-    out.reasons.unshift(`已套用精準止盈：以 R 倍數 + 阻力(VP/節點/前高) 選價；R=${tpPack.R.toFixed(6)}`);
+    out.reasons.unshift(`已套用5K波段精準止盈：floor=${CONFIG.TP_K.join("/") }R + 阻力(VP/節點/前高)，R=${tpPack.R.toFixed(6)}`);
   } else {
-    // normalize tp format
     out.takeProfit = out.takeProfit
       .map(tp => ({ price: Number(tp.price), pct: Number(tp.pct ?? 0), logic: String(tp.logic ?? "") }))
       .filter(tp => isFinite(tp.price))
@@ -1363,7 +1357,7 @@ function normalizeAiPick(sym, summary, pick) {
 }
 
 /* ===========================
-   Batch AI (Top10 -> Top5)
+   Batch AI + Single AI (same as V7.4 logic)
 =========================== */
 async function runAIOnce(force=false) {
   const now = Date.now();
@@ -1442,9 +1436,7 @@ async function runAIOnce(force=false) {
     } else {
       const same = pinnedTop1.symbol === top1.symbol;
       const stronger = (top1.score >= pinnedTop1.score + 4) || (top1.confidence >= pinnedTop1.confidence + 8);
-      if (!same && stronger) {
-        pinnedTop1 = { symbol: top1.symbol, score: top1.score, confidence: top1.confidence, ts: Date.now() };
-      }
+      if (!same && stronger) pinnedTop1 = { symbol: top1.symbol, score: top1.score, confidence: top1.confidence, ts: Date.now() };
     }
 
     lastAiTs = Date.now();
@@ -1464,9 +1456,6 @@ async function runAIOnce(force=false) {
   }
 }
 
-/* ===========================
-   Single-symbol AI update (previous + current)
-=========================== */
 async function runAISingle(symbol) {
   const sym = String(symbol || "").toUpperCase();
   if (!symState[sym]) return alert("這個幣目前沒有 state（可能不在 Top10）");
@@ -1555,7 +1544,6 @@ async function searchAndAdd() {
   if (CONFIG.TOPCAP_EXCLUDE.includes(sym)) return alert("已排除大市值前25：" + sym);
   if (CONFIG.EXCLUDE_EXTRA.includes(sym)) return alert("已排除穩定幣：" + sym);
 
-  // ✅ 若之前被你「不看」過，搜尋就視為你要看：解除隱藏
   if (hiddenSet.has(sym)) {
     hiddenSet.delete(sym);
     saveHiddenSet();
@@ -1593,7 +1581,7 @@ async function searchAndAdd() {
 
   const sum = buildSummary(sym);
   if (sum) {
-    const placeholder = normalizeAiPick(sym, sum, { score: sum.preScore, confidence: 55, eta_minutes: "10-30", stage: sum.stage });
+    const placeholder = normalizeAiPick(sym, sum, { score: sum.preScore, confidence: 55, eta_minutes: "30-60", stage: sum.stage });
     aiBySymbol[sym] = placeholder;
 
     if (!aiTop5.find(x => x.symbol === sym)) aiTop5.unshift(placeholder);
@@ -1650,6 +1638,7 @@ function renderTop5Cards() {
     const vpLine = vp ? `POC:${fmt(vp.poc,6)} VA:${fmt(vp.val,6)}~${fmt(vp.vah,6)} ΔPOC:${fmt(vp.price_vs_poc_pct,2)}%` : "-";
     const vpNodes = vp?.top_nodes ? vp.top_nodes.map(n=>`${fmt(n.price,6)}(${fmt(n.vol_pct,1)}%)`).join(" / ") : "-";
 
+    const warmMin = sum?.warmup_minutes ?? "-";
     const card = document.createElement("div");
     card.className = `card p-4 ${isTop1 ? "card-top1" : ""}`;
 
@@ -1671,6 +1660,10 @@ function renderTop5Cards() {
                 5m漲跌: <b class="${(sum?.ret5m_pct||0)>=0 ? "ok":"bad"}">${fmt(sum?.ret5m_pct,2)}%</b>
                 <span class="mx-2 muted">|</span>
                 前端分: <b>${fmt(sum?.preScore,0)}</b>
+                <span class="mx-2 muted">|</span>
+                熱機: <b>${warmMin}m</b>
+                <span class="mx-2 muted">|</span>
+                K: <b>${sum?.kline_interval || "-"}</b>
               </div>
               <div class="tiny mt-2 ${stageClass(stage)} font-bold">階段：${stage}</div>
             </div>
@@ -1687,11 +1680,11 @@ function renderTop5Cards() {
             <div class="kv tiny">OIΔ(4h): <b>${fmt(sum?.oi_delta_4h,2)}</b></div>
             <div class="kv tiny">資金費率(%): <b>${fmt(sum?.funding_pct,3)}</b> / premium(%): <b>${fmt(sum?.premium_pct,3)}</b></div>
 
-            <div class="kv tiny">ATR14: <b>${fmt(sum?.atr14,6)}</b></div>
-            <div class="kv tiny">SwingLow20: <b>${fmt(sum?.swing_low_20,6)}</b></div>
-            <div class="kv tiny">SwingHigh20: <b>${fmt(sum?.swing_high_20,6)}</b></div>
+            <div class="kv tiny">ATR14(5K): <b>${fmt(sum?.atr14,6)}</b></div>
+            <div class="kv tiny">SwingLow(窗口): <b>${fmt(sum?.swing_low_20,6)}</b></div>
+            <div class="kv tiny">SwingHigh(窗口): <b>${fmt(sum?.swing_high_20,6)}</b></div>
 
-            <div class="kv tiny">Range20(%): <b>${fmt(sum?.range_20_pct,2)}</b></div>
+            <div class="kv tiny">Range(%): <b>${fmt(sum?.range_20_pct,2)}</b></div>
             <div class="kv tiny">distSMA20/ATR: <b>${fmt(sum?.dist_sma20_atr,2)}</b></div>
             <div class="kv tiny">今日成交分布: <b>${vpLine}</b></div>
             <div class="kv tiny">VP節點: <b>${vpNodes}</b></div>
@@ -1746,7 +1739,7 @@ function renderTop5Cards() {
 }
 
 /* ===========================
-   miniTicker（更新 UI 時間戳）
+   miniTicker
 =========================== */
 function startMiniTicker() {
   const ws = new WebSocket("wss://fstream.binance.com/ws/!miniTicker@arr");
@@ -1805,7 +1798,7 @@ async function boot() {
   }, CONFIG.VP_REFRESH_MS);
 
   setInterval(() => runAIOnce(false), 1500);
-  setTimeout(() => runAIOnce(true), 8000);
+  setTimeout(() => runAIOnce(true), 12000); // ✅ 先讓熱機多一點再跑
 }
 
 boot();

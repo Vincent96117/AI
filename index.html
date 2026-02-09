@@ -2,38 +2,49 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V15.0 FINAL</title>
+    <title>🔱 TRIDENT V17.1 - FINAL</title>
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        .card { border: 1px dotted #333; padding: 15px; margin-bottom: 10px; }
-        .symbol { font-size: 1.5rem; color: #00ffcc; }
-        .ai-box { background: #111; padding: 10px; color: #fff; border-left: 3px solid #0f0; margin-top: 5px; }
+        :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; padding: 20px; }
+        .header { background: #111; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #333; margin-bottom: 20px; }
+        #deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+        .card { background: var(--card); border: 1px solid #222; border-radius: 15px; padding: 20px; border-top: 4px solid #333; }
+        .symbol { font-size: 1.8rem; font-weight: 900; color: var(--accent); }
+        .fd-tag { background: #222; padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; }
+        .alert-purple { background: var(--purple) !important; color: white !important; box-shadow: 0 0 15px var(--purple); }
+        .ai-box { background: #000; color: #fff; padding: 12px; border-radius: 10px; font-size: 0.9rem; border-left: 4px solid var(--accent); margin-top: 15px; min-height: 80px; white-space: pre-wrap; line-height: 1.5; }
     </style>
 </head>
 <body>
-    <h2>🔱 TRIDENT V15.0 - 強制對接模式</h2>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V17.1 GEMINI</span></h1></div>
     <div id="deck"></div>
 
     <script>
-        const GK = "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";
-        const PT = "acyoe3sz15x4n91r1349fdcau7x6pw";
-        const PU = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4";
+        const GEMINI_KEY = "AIzaSyCK5cMo5FL895WwRzggkFjPi0JRe5tVqXQ";
+        const PUSHOVER = { u: "Gkhqyhobnxzjfwgvaiyp347m1jkhn4", t: "acyoe3sz15x4n91r1349fdcau7x6pw" };
         const BLACKLIST = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "BNXUSDT"];
 
         let market = {};
-        let busy = false;
+        let isBusy = false;
+        let lastReport = {};
 
-        async function start() {
+        async function init() {
             const r = await fetch("https://fapi.binance.com/fapi/v1/premiumIndex");
             const d = await r.json();
             d.forEach(i => {
                 if (i.symbol.endsWith("USDT") && !BLACKLIST.includes(i.symbol)) {
-                    market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate)*100, p: i.markPrice, startP: i.markPrice };
+                    market[i.symbol] = { s: i.symbol, fd: parseFloat(i.lastFundingRate)*100, p: i.markPrice, startP: i.markPrice, hist: [] };
                 }
             });
             const ws = new WebSocket("wss://fstream.binance.com/ws/!ticker@arr");
             ws.onmessage = (e) => {
-                JSON.parse(e.data).forEach(t => { if(market[t.s]) market[t.s].p = t.c; });
+                JSON.parse(e.data).forEach(t => {
+                    if (market[t.s]) {
+                        market[t.s].p = t.c;
+                        market[t.s].hist.push(t.c);
+                        if(market[t.s].hist.length > 20) market[t.s].hist.shift();
+                    }
+                });
                 draw();
             };
         }
@@ -43,52 +54,64 @@
             const deck = document.getElementById("deck");
             deck.innerHTML = "";
             list.forEach(item => {
-                const isAlert = Math.abs(item.fd) >= 0.05;
+                const isH = Math.abs(item.fd) >= 0.05;
                 const div = document.createElement("div");
                 div.className = "card";
-                div.innerHTML = `<span class="symbol">${item.s}</span> [FD: ${item.fd.toFixed(4)}%] <div id="ai-${item.s}" class="ai-box">系統待命中...</div>`;
+                if(isH) div.style.borderColor = 'var(--purple)';
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="symbol">${item.s}</span>
+                        <span class="fd-tag ${isH?'alert-purple':''}">FD: ${item.fd.toFixed(4)}%</span>
+                    </div>
+                    <div style="margin-top:10px; font-size:0.85rem; color:#888;">現價: ${item.p} | 始價: ${item.startP}</div>
+                    <div id="ai-${item.s}" class="ai-box">>> 監測數據中...</div>
+                `;
                 deck.appendChild(div);
 
-                if (isAlert && !busy) callAI(item);
+                // 觸發診斷邏輯
+                if (isH && !isBusy && (!lastReport[item.s] || Date.now() - lastReport[item.s] > 60000)) {
+                    runGemini(item);
+                }
             });
         }
 
-        async function callAI(item) {
-            busy = true;
-            document.getElementById(`ai-${item.s}`).innerText = ">> 正在進行破壁連線...";
-            
+        async function runGemini(item) {
+            isBusy = true;
+            lastReport[item.s] = Date.now();
+            const box = document.getElementById(`ai-${item.s}`);
+            box.innerText = ">> [Gemini] 正在計算斜率與主力意圖...";
+
             try {
-                // 採用最原始的 fetch 配置，防止外掛干擾
-                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GK}` },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        model: "llama3-70b-8192",
-                        messages: [{role: "user", content: `標的:${item.s},始價:${item.startP},現價:${item.p},資費:${item.fd}%。給出:方向(多/空)、表態時間(min)、勝率。結論第一行。`}],
-                        temperature: 0.1
+                        contents: [{ parts: [{ text: `你是加密貨幣狙擊手。標的:${item.s},資費:${item.fd}%,走勢序列:${item.hist.slice(-10).join('->')}。請給出：1.明確方向(多/空) 2.預計多久表態(min) 3.主力意圖 4.勝率。繁體中文，結論放第一行。` }] }]
                     })
                 });
-
                 const data = await response.json();
-                if(data.error) throw new Error(data.error.message);
-                
-                const res = data.choices[0].message.content;
-                document.getElementById(`ai-${item.s}`).innerText = ">> " + res;
+                const res = data.candidates[0].content.parts[0].text;
+                box.innerText = ">> " + res;
 
+                // Pushover 標題優化 [cite: 2026-01-21]
                 if (res.includes("9") || res.includes("高")) {
-                    fetch("https://api.pushover.net/1/messages.json", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: `token=${PT}&user=${PU}&message=${encodeURIComponent(res)}&title=🔱TRIDENT:${item.s}`
-                    });
+                    const dir = res.includes("多") ? "多" : (res.includes("空") ? "空" : "！");
+                    const timeMatch = res.match(/(\d+)\s*(min|分)/);
+                    const time = timeMatch ? timeMatch[1] + "m" : "即將";
+                    sendPushover(res, `【${dir}/${time}】${item.s}`);
                 }
-            } catch (err) {
-                document.getElementById(`ai-${item.s}`).innerText = "❌ 接通失敗：" + err.message;
-            } finally {
-                setTimeout(() => { busy = false; }, 10000);
-            }
+            } catch (err) { box.innerText = "❌ Gemini 連線失敗: " + err.message; }
+            finally { setTimeout(() => { isBusy = false; }, 8000); }
         }
-        start();
+
+        function sendPushover(msg, title) {
+            fetch("https://api.pushover.net/1/messages.json", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `token=${PUSHOVER.t}&user=${PUSHOVER.u}&message=${encodeURIComponent(msg)}&title=${encodeURIComponent(title)}`
+            });
+        }
+        init();
     </script>
 </body>
 </html>

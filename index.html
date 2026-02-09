@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TRIDENT V7 - Top20 → AI選Top5（LONG ONLY）</title>
+  <title>TRIDENT V7 - FastWarmup（Top20 → AI選Top5 / LONG ONLY）</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
@@ -14,7 +14,6 @@
     .ok { color:#22c55e; }
     .warn { color:#f59e0b; }
     .bad { color:#ef4444; }
-    .mono { font-family:'JetBrains Mono', monospace; }
     .card { background:#0f0f11; border:1px solid #1f1f23; border-radius:14px; overflow:hidden; }
     .card-top1 { border:2px solid #22c55e !important; box-shadow:0 0 0 1px rgba(34,197,94,0.2), 0 0 24px rgba(34,197,94,0.15); }
     .kv { background:#0b0b0d; border:1px solid #1f1f23; border-radius:10px; padding:8px 10px; }
@@ -51,7 +50,7 @@
       <div>
         <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7</span></div>
         <div class="tiny muted font-bold tracking-widest uppercase">
-          Top20 anomalies → AI pick Top5 (LONG ONLY)
+          FAST WARMUP: cross-section anomalies → self anomalies (LONG ONLY)
         </div>
       </div>
     </div>
@@ -83,10 +82,11 @@
       <span class="badge px-2 py-1 rounded-lg">更新: <b id="lastTick">-</b></span>
       <span class="badge px-2 py-1 rounded-lg">Binance: <b id="binStatus" class="muted">-</b></span>
       <span class="badge px-2 py-1 rounded-lg">AI: <b id="aiStatus" class="muted">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">Warmup: <b id="warmState" class="warn">FAST</b></span>
     </div>
 
     <div class="tiny muted">
-      規則：前端先篩 Top20（波動/量能/OI/主動買差額/反追價）→ AI 從 Top20 選 Top5 並給進出場/停損/止盈/ETA（只做多）
+      前 5~10 分鐘：用「市場橫斷面異常」快速出 Top20；每幣累積滿 8 個 5m bucket 後自動切回「跟自己比」。
     </div>
   </div>
 
@@ -113,43 +113,49 @@
 const CONFIG = {
   LONG_ONLY: true,
 
-  // Universe: 每隔一段時間用 24hr quoteVolume 抓一批「可交易」池
-  UNIVERSE_LIMIT: 80,         // 追求品質/不太吃資源：80~120 都行
+  UNIVERSE_LIMIT: 80,
   UNIVERSE_REFRESH_MS: 5 * 60 * 1000,
 
-  // 前端只輸出 Top20「有料候選」給 AI
   CANDIDATE_LIMIT: 20,
-  CANDIDATE_REFRESH_MS: 8000,
+  CANDIDATE_REFRESH_MS: 3000,   // 加速：更快看到 Top20 動起來
 
-  // AI 從 Top20 挑 Top5（前端只畫 Top5）
   TOP5_LIMIT: 5,
   AI_INTERVAL_MS: 2 * 60 * 1000,
 
-  // 計算用
   ROLL_5M_MS: 5 * 60 * 1000,
   BUCKET_5M_MS: 5 * 60 * 1000,
-  HIST_5M_BUCKETS: 48,        // 4 小時 = 48 個 5m bucket
-  KLINES_LIMIT: 60,           // 1m * 60
+  HIST_5M_BUCKETS: 48,
+  KLINES_LIMIT: 60,
   ATR_PERIOD: 14,
   SWING_WINDOW: 20,
 
-  // 反追價 (anti-chase) 閾值（你之後要調整就改這裡）
   ANTI_CHASE: {
-    ret5mPctMax: 1.2,          // 5m 漲幅太高不追
-    distSmaAtrMax: 1.2,        // 離 SMA20 超過 1.2 ATR 視為追價風險
-    range20PctMax: 3.2         // 近 20 根震幅太大，追價風險
+    ret5mPctMax: 1.2,
+    distSmaAtrMax: 1.2,
+    range20PctMax: 3.2
   },
 
-  // 只挑「有料」：基本門檻（你之後要調整就改這裡）
+  // 正常模式（跟自己比）
   THRESH: {
-    volZMin: 1.4,              // 量能異常
-    deltaNotionalMin: 20000,   // 主動買差額(5m) 最少金額（USDT notional）
-    imbalanceMin: 0.08,        // 主動買入比例門檻
+    volZMin: 1.4,
+    deltaNotionalMin: 20000,
+    imbalanceMin: 0.08,
     preScoreMin: 55
   },
 
-  // 不要市值前 25（靜態排除清單；你可以自行增減）
-  // ⚠️ 這不是即時市值 API，是你要求「前端完成」的最佳折衷：用常見 Top cap 做排除
+  // ✅ FAST WARMUP（5分鐘上線）
+  // 尚未累積滿 histBucketsForSelfZ 前：用 cross-section z + 放寬門檻
+  FAST_WARMUP: {
+    enabled: true,
+    histBucketsForSelfZ: 8,     // 8 個 5m bucket = 40 分鐘後自動切回「跟自己比」
+    THRESH: {
+      volZMin: 0.9,
+      deltaNotionalMin: 8000,
+      imbalanceMin: 0.02,       // buy ratio >= 0.52
+      preScoreMin: 48
+    }
+  },
+
   TOPCAP_EXCLUDE: [
     "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","TONUSDT",
     "AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","POLUSDT","SHIBUSDT","1000SHIBUSDT",
@@ -157,12 +163,13 @@ const CONFIG = {
     "NEARUSDT","ARBUSDT","OPUSDT"
   ],
 
-  // 你原本排除 + 其他常見（可自行調整）
   EXCLUDE_EXTRA: [
     "USDCUSDT","TUSDUSDT","FDUSDUSDT","USDPUSDT","DAIUSDT",
     "BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","BNXUSDT"
   ]
 };
+
+const APP_START = Date.now();
 
 /* ===========================
    STATE
@@ -171,15 +178,15 @@ let AUTO_AI = true;
 let lastAiTs = 0;
 let aiBackoffUntil = 0;
 
-let universe = [];              // symbols in current universe
-let symState = {};              // per symbol state
-let wsAgg = {};                 // per symbol aggTrade websocket
-let wsMini = null;              // global miniTicker
+let universe = [];
+let symState = {};
+let wsAgg = {};
+let wsMini = null;
 
-let premiumMap = {};            // funding/premium info map (all symbols)
-let candidatesTop20 = [];       // array of symbol strings
-let aiTop5 = [];                // array of picks from AI
-let aiBySymbol = {};            // symbol -> aiPick
+let premiumMap = {};
+let candidatesTop20 = [];
+let aiTop5 = [];
+let aiBySymbol = {};
 let pinnedTop1 = { symbol:null, score:-1, confidence:-1, ts:0 };
 
 /* ===========================
@@ -195,17 +202,12 @@ function fmt(n, digits=2) {
   return Number(n).toFixed(digits);
 }
 function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
-
 function setStatus(el, text, cls) {
   const node = $(el);
   node.textContent = text;
   node.className = cls || "muted";
 }
-
-function toggleDebug() {
-  $("debugWrap").classList.toggle("hidden");
-}
-
+function toggleDebug() { $("debugWrap").classList.toggle("hidden"); }
 function saveKey() {
   const k = $("aiKey").value.trim();
   if (!k) return alert("請輸入 Groq API Key");
@@ -226,7 +228,6 @@ function toggleAutoAI() {
   $("autoLbl").textContent = `Auto AI: ${AUTO_AI ? "ON" : "OFF"}`;
 }
 function hardReset() {
-  // 關閉 ws
   try { if (wsMini) wsMini.close(); } catch {}
   Object.keys(wsAgg).forEach(s => { try { wsAgg[s].close(); } catch {} });
   wsAgg = {};
@@ -247,6 +248,8 @@ function hardReset() {
   $("candN").textContent = "-";
   $("top5N").textContent = "-";
   $("pinnedSym").textContent = "-";
+  $("warmState").textContent = "FAST";
+  $("warmState").className = "warn";
 
   boot();
 }
@@ -263,8 +266,9 @@ async function fetchJSON(url) {
   return data;
 }
 
+// ✅ 改成更寬鬆：只要有 2~3 個樣本也可以算。"標準差=0" 就回 0
 function zscore(x, arr) {
-  if (!arr || arr.length < 8) return null;
+  if (!arr || arr.length < 3) return null;
   const m = arr.reduce((a,b)=>a+b,0) / arr.length;
   const v = arr.reduce((a,b)=>a+(b-m)*(b-m),0) / arr.length;
   const s = Math.sqrt(v);
@@ -272,15 +276,41 @@ function zscore(x, arr) {
   return (x - m) / s;
 }
 
+function meanStd(arr) {
+  if (!arr || arr.length < 3) return { mean: 0, std: 0 };
+  const mean = arr.reduce((a,b)=>a+b,0) / arr.length;
+  const v = arr.reduce((a,b)=>a+(b-mean)*(b-mean),0) / arr.length;
+  const std = Math.sqrt(v);
+  return { mean, std };
+}
+
+function isSelfHistoryReady(s) {
+  const need = CONFIG.FAST_WARMUP.histBucketsForSelfZ;
+  return (s?.histBuckets ?? 0) >= need;
+}
+
+function activeThresh(s) {
+  if (!CONFIG.FAST_WARMUP.enabled) return CONFIG.THRESH;
+  return isSelfHistoryReady(s) ? CONFIG.THRESH : CONFIG.FAST_WARMUP.THRESH;
+}
+
+function updateWarmLabel() {
+  // 只要 universe 內有一大半幣尚未 ready，就顯示 FAST
+  const list = universe.map(x=>symState[x]).filter(Boolean);
+  if (!list.length) return;
+  const readyN = list.filter(isSelfHistoryReady).length;
+  const fast = readyN < Math.max(10, Math.floor(list.length*0.5));
+  $("warmState").textContent = fast ? "FAST" : "SELF";
+  $("warmState").className = fast ? "warn" : "ok";
+}
+
 /* ===========================
-   Binance data: universe + premium
+   Binance: premium + universe
 =========================== */
 async function refreshPremiumAll() {
-  // premiumIndex 不帶 symbol 會回全部
   const data = await fetchJSON("https://fapi.binance.com/fapi/v1/premiumIndex");
   const map = {};
   for (const r of data) {
-    // r: {symbol, markPrice, indexPrice, lastFundingRate, ...}
     const mark = parseFloat(r.markPrice);
     const idx = parseFloat(r.indexPrice);
     const premiumPct = (idx && mark) ? ((mark - idx) / idx * 100) : null;
@@ -295,18 +325,12 @@ async function refreshPremiumAll() {
 }
 
 async function refreshUniverse() {
-  // 24hr tickers: 全量，取 quoteVolume 前 N 作為 universe（但最終「有料」還是靠異常分數）
   const tickers = await fetchJSON("https://fapi.binance.com/fapi/v1/ticker/24hr");
   const ex = new Set([...CONFIG.TOPCAP_EXCLUDE, ...CONFIG.EXCLUDE_EXTRA]);
 
-  // 只取 USDT 永續
-  // 這裡用簡化：symbol endsWith USDT
   const filtered = tickers
     .filter(t => t.symbol.endsWith("USDT") && !ex.has(t.symbol))
-    .map(t => ({
-      symbol: t.symbol,
-      quoteVolume: parseFloat(t.quoteVolume || "0"),
-    }))
+    .map(t => ({ symbol: t.symbol, quoteVolume: parseFloat(t.quoteVolume || "0") }))
     .sort((a,b) => b.quoteVolume - a.quoteVolume)
     .slice(0, CONFIG.UNIVERSE_LIMIT)
     .map(x => x.symbol);
@@ -314,9 +338,8 @@ async function refreshUniverse() {
   universe = filtered;
   $("universeN").textContent = universe.length;
 
-  // 啟動 / 關閉 aggTrade streams（只維持 universe）
   const uSet = new Set(universe);
-  // close removed
+
   Object.keys(wsAgg).forEach(sym => {
     if (!uSet.has(sym)) {
       try { wsAgg[sym].close(); } catch {}
@@ -324,7 +347,7 @@ async function refreshUniverse() {
       delete symState[sym];
     }
   });
-  // open new
+
   for (const sym of universe) {
     if (!wsAgg[sym]) initAggTrade(sym);
     if (!symState[sym]) initSymbolState(sym);
@@ -340,33 +363,34 @@ function initSymbolState(sym) {
     price: null,
     lastTradeTs: 0,
 
-    // 5m rolling window (trade samples)
     trades: [], // {ts, price, notional, deltaNotional, isBuy}
 
-    // 5m bucket history (for zscore)
-    buckets: new Map(), // bucketId -> {notional, deltaNotional}
-    bucketIds: [],      // keep ordering (max HIST_5M_BUCKETS + 2)
+    buckets: new Map(),
+    bucketIds: [],
 
     vol5mNotional: null,
     delta5mNotional: null,
-    imbalance5m: null, // buy/(buy+sell)
+    imbalance5m: null,
 
     volZ5m: null,
     deltaZ5m: null,
 
+    // ✅ FAST fallback: cross-section z (不需要歷史)
+    volZcs: null,
+    deltaZcs: null,
+
+    histBuckets: 0, // ✅ 記錄「歷史 bucket 數」
+
     ret5mPct: null,
 
-    // premium/funding
     fundingPct: null,
     premiumPct: null,
 
-    // OI
     oiCurrent: null,
-    oiSamples: [], // {ts, oi}
+    oiSamples: [],
     oiDelta5m: null,
     oiDelta4h: null,
 
-    // Kline-based risk/entry helpers
     klinesReady: false,
     atr14: null,
     swingLow20: null,
@@ -375,12 +399,10 @@ function initSymbolState(sym) {
     sma20: null,
     distSma20Atr: null,
 
-    // derived
     stage: "熱機中",
     tags: [],
     preScore: 0,
 
-    // warmup
     firstSeenTs: Date.now(),
   };
 }
@@ -394,11 +416,8 @@ function initAggTrade(sym) {
     $("hb").classList.add("hb-on");
     setStatus("binStatus","WS OK","ok");
   };
-  ws.onerror = () => {
-    setStatus("binStatus","WS error","warn");
-  };
+  ws.onerror = () => setStatus("binStatus","WS error","warn");
   ws.onclose = () => {
-    // 會自動重連（若還在 universe）
     if (universe.includes(sym)) {
       setTimeout(() => {
         if (!wsAgg[sym] || wsAgg[sym].readyState === 3) initAggTrade(sym);
@@ -409,6 +428,7 @@ function initAggTrade(sym) {
   ws.onmessage = (ev) => {
     const s = symState[sym];
     if (!s) return;
+
     const d = JSON.parse(ev.data);
 
     const ts = d.T;
@@ -416,34 +436,28 @@ function initAggTrade(sym) {
     const qty = parseFloat(d.q);
     const notional = price * qty;
 
-    // d.m: buyer is maker -> 代表這筆是「賣方主動」；反之是「買方主動」
     const isBuyAgg = !d.m;
     const deltaNotional = isBuyAgg ? notional : -notional;
 
     s.price = price;
     s.lastTradeTs = ts;
 
-    // rolling trade samples for 5m return + delta
     s.trades.push({ ts, price, notional, deltaNotional, isBuy: isBuyAgg });
 
-    // prune trades older than 5m
     const cutoff = Date.now() - CONFIG.ROLL_5M_MS;
     while (s.trades.length && s.trades[0].ts < cutoff) s.trades.shift();
 
-    // compute 5m return
     if (s.trades.length >= 2) {
       const old = s.trades[0].price;
       if (old > 0) s.ret5mPct = (price / old - 1) * 100;
     }
 
-    // bucket update (5m buckets)
     const bucketId = Math.floor(ts / CONFIG.BUCKET_5M_MS);
     let b = s.buckets.get(bucketId);
     if (!b) {
       b = { notional: 0, deltaNotional: 0 };
       s.buckets.set(bucketId, b);
       s.bucketIds.push(bucketId);
-      // keep last HIST buckets + some headroom
       while (s.bucketIds.length > CONFIG.HIST_5M_BUCKETS + 3) {
         const id = s.bucketIds.shift();
         s.buckets.delete(id);
@@ -452,14 +466,11 @@ function initAggTrade(sym) {
     b.notional += notional;
     b.deltaNotional += deltaNotional;
 
-    // compute current 5m bucket stats
     const curB = s.buckets.get(bucketId);
     if (curB) {
       s.vol5mNotional = curB.notional;
       s.delta5mNotional = curB.deltaNotional;
 
-      // imbalance: approximate from delta and total (not perfect, but useful)
-      // buyNotional = (total + delta)/2 ; sellNotional = (total - delta)/2
       const total = curB.notional || 0;
       const delta = curB.deltaNotional || 0;
       const buy = (total + delta) / 2;
@@ -468,65 +479,75 @@ function initAggTrade(sym) {
       s.imbalance5m = denom > 0 ? (buy / denom) : null;
     }
 
-    // zscores based on previous full buckets (exclude current bucket for stability)
+    // self-history zscore (仍保留)
     const histIds = s.bucketIds.filter(id => id !== bucketId);
+    s.histBuckets = histIds.length; // ✅ 記錄歷史 bucket 數
+
     const histVol = histIds.map(id => (s.buckets.get(id)?.notional || 0)).filter(x => x > 0);
     const histDelta = histIds.map(id => (s.buckets.get(id)?.deltaNotional || 0));
+
     if (s.vol5mNotional !== null) s.volZ5m = zscore(s.vol5mNotional, histVol);
     if (s.delta5mNotional !== null) s.deltaZ5m = zscore(s.delta5mNotional, histDelta);
 
-    // sync premium/funding (from cached premiumMap)
     const p = premiumMap[sym];
     if (p) {
       s.fundingPct = p.fundingPct;
       s.premiumPct = p.premiumPct;
     }
 
-    // recompute derived
     deriveSymbol(sym);
   };
 }
 
 /* ===========================
-   OI + Klines bootstrap for candidates
+   FAST warmup: cross-section z (不需要歷史)
+=========================== */
+function computeCrossSectionZ() {
+  const list = universe.map(sym => symState[sym]).filter(s => s && s.vol5mNotional !== null && s.delta5mNotional !== null);
+
+  if (list.length < 10) return;
+
+  const vols = list.map(s => s.vol5mNotional).filter(v => v > 0);
+  const deltas = list.map(s => s.delta5mNotional);
+
+  const vs = meanStd(vols);
+  const ds = meanStd(deltas);
+
+  for (const s of list) {
+    s.volZcs = (vs.std > 0) ? (s.vol5mNotional - vs.mean) / vs.std : 0;
+    s.deltaZcs = (ds.std > 0) ? (s.delta5mNotional - ds.mean) / ds.std : 0;
+  }
+}
+
+/* ===========================
+   OI + Klines
 =========================== */
 async function ensureKlinesAndOI(sym) {
   const s = symState[sym];
   if (!s) return;
 
-  // Klines fetch (1m, 60)
   try {
     const k = await fetchJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1m&limit=${CONFIG.KLINES_LIMIT}`);
     computeKlineFeatures(sym, k);
-  } catch (e) {
-    // ignore
-  }
+  } catch {}
 
-  // OI fetch current
   try {
     const oi = await fetchJSON(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`);
     const v = parseFloat(oi.openInterest);
     if (!Number.isNaN(v)) {
       s.oiCurrent = v;
       s.oiSamples.push({ ts: Date.now(), oi: v });
-      // keep 4h samples
       const cutoff = Date.now() - 4*60*60*1000 - 60*1000;
       while (s.oiSamples.length && s.oiSamples[0].ts < cutoff) s.oiSamples.shift();
       computeOIDeltas(sym);
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch {}
 }
 
-/* ===========================
-   Kline features: ATR14, swing low/high, range%
-=========================== */
 function computeKlineFeatures(sym, k) {
   const s = symState[sym];
   if (!s || !Array.isArray(k) || k.length < 25) return;
 
-  // Parse candles
   const candles = k.map(x => ({
     open: parseFloat(x[1]),
     high: parseFloat(x[2]),
@@ -536,18 +557,15 @@ function computeKlineFeatures(sym, k) {
 
   if (candles.length < 25) return;
 
-  // SMA20 close
   const last20 = candles.slice(-20);
   s.sma20 = last20.reduce((a,c)=>a+c.close,0) / last20.length;
 
-  // Swing window
   const w = candles.slice(-CONFIG.SWING_WINDOW);
   s.swingLow20 = Math.min(...w.map(c => c.low));
   s.swingHigh20 = Math.max(...w.map(c => c.high));
   const lastClose = candles[candles.length-1].close;
   s.range20Pct = lastClose > 0 ? ((s.swingHigh20 - s.swingLow20) / lastClose * 100) : null;
 
-  // ATR14
   const n = CONFIG.ATR_PERIOD;
   const trs = [];
   for (let i=1; i<candles.length; i++) {
@@ -565,7 +583,6 @@ function computeKlineFeatures(sym, k) {
     s.atr14 = lastTR.reduce((a,v)=>a+v,0) / lastTR.length;
   }
 
-  // distSma20Atr
   if (s.atr14 && s.atr14 > 0 && s.sma20 && lastClose) {
     s.distSma20Atr = Math.abs(lastClose - s.sma20) / s.atr14;
   }
@@ -573,9 +590,6 @@ function computeKlineFeatures(sym, k) {
   s.klinesReady = true;
 }
 
-/* ===========================
-   OI deltas
-=========================== */
 function computeOIDeltas(sym) {
   const s = symState[sym];
   if (!s || s.oiSamples.length < 3) return;
@@ -583,7 +597,6 @@ function computeOIDeltas(sym) {
 
   const getOiAgo = (ms) => {
     const t = now - ms;
-    // 找最接近但<=t 的
     let best = null;
     for (let i=s.oiSamples.length-1; i>=0; i--) {
       if (s.oiSamples[i].ts <= t) { best = s.oiSamples[i]; break; }
@@ -599,13 +612,14 @@ function computeOIDeltas(sym) {
 }
 
 /* ===========================
-   Derive: stage, tags, preScore (LONG bias)
+   Derive: stage / tags / preScore
 =========================== */
 function deriveSymbol(sym) {
   const s = symState[sym];
   if (!s) return;
 
-  // warmup
+  const T = activeThresh(s);
+
   const warmSec = Math.floor((Date.now() - s.firstSeenTs)/1000);
 
   const antiChase =
@@ -613,10 +627,13 @@ function deriveSymbol(sym) {
     (s.distSma20Atr !== null && s.distSma20Atr > CONFIG.ANTI_CHASE.distSmaAtrMax) ||
     (s.range20Pct !== null && s.range20Pct > CONFIG.ANTI_CHASE.range20PctMax);
 
-  // Tags
   const tags = [];
-  if (s.volZ5m !== null && s.volZ5m >= 2.0) tags.push("量能爆量");
-  else if (s.volZ5m !== null && s.volZ5m >= 1.4) tags.push("量能異常");
+  const vzEff = (s.volZ5m !== null) ? s.volZ5m : (s.volZcs ?? null);
+  const dzEff = (s.deltaZ5m !== null) ? s.deltaZ5m : (s.deltaZcs ?? null);
+
+  if (vzEff !== null && vzEff >= 2.0) tags.push("量能爆量");
+  else if (vzEff !== null && vzEff >= 1.2) tags.push("量能異常");
+
   if (s.delta5mNotional !== null && s.delta5mNotional > 0) tags.push("主動買差額>0");
   if (s.imbalance5m !== null && s.imbalance5m >= 0.55) tags.push("買盤佔優");
   if (s.oiDelta5m !== null && s.oiDelta5m > 0) tags.push("OI(5m)上升");
@@ -625,15 +642,14 @@ function deriveSymbol(sym) {
   if (s.range20Pct !== null && s.range20Pct < 0.9) tags.push("窄幅收斂");
   if (s.swingHigh20 && s.price && (s.swingHigh20 - s.price)/s.price*100 < 0.25) tags.push("接近突破位");
   if (antiChase) tags.push("已急拉/追價風險");
+  if (!isSelfHistoryReady(s)) tags.push("FAST_warmup(橫斷面)");
   s.tags = tags;
 
-  // Stage
-  // 注意：只做多，所以重點看「量能 + 主動買 + (OI可選) + 不追價」
   const flowOK =
-    (s.delta5mNotional !== null && s.delta5mNotional > CONFIG.THRESH.deltaNotionalMin) &&
-    (s.imbalance5m !== null && s.imbalance5m >= (0.5 + CONFIG.THRESH.imbalanceMin));
+    (s.delta5mNotional !== null && s.delta5mNotional > T.deltaNotionalMin) &&
+    (s.imbalance5m !== null && s.imbalance5m >= (0.5 + T.imbalanceMin));
 
-  const volOK = (s.volZ5m !== null && s.volZ5m >= CONFIG.THRESH.volZMin);
+  const volOK = (vzEff !== null && vzEff >= T.volZMin);
   const notDump = (s.ret5mPct === null) ? true : (s.ret5mPct > -1.0);
 
   const setup = volOK && flowOK && notDump && !antiChase;
@@ -644,35 +660,28 @@ function deriveSymbol(sym) {
   else if (confirm) s.stage = "觸發";
   else if (ignite) s.stage = "點火";
   else if (setup) s.stage = "蓄勢";
-  else s.stage = warmSec < 90 ? "熱機中" : "冷卻";
+  else s.stage = warmSec < 60 ? "熱機中" : "冷卻";
 
-  // preScore (0~100)
-  // 用 zscore 做主軸，加入 anti-chase 懲罰，偏多加分
+  // preScore
   let score = 50;
 
-  const vz = (s.volZ5m === null) ? 0 : clamp(s.volZ5m, -3, 3);
-  const dz = (s.deltaZ5m === null) ? 0 : clamp(s.deltaZ5m, -3, 3);
+  const vz = (vzEff === null) ? 0 : clamp(vzEff, -3, 3);
+  const dz = (dzEff === null) ? 0 : clamp(dzEff, -3, 3);
 
   score += 10 * vz;
   score += 8 * dz;
 
-  // 主動買差額（notional）額外加分（縮放）
   if (s.delta5mNotional !== null) score += clamp(s.delta5mNotional / 60000, -8, 12);
 
-  // OI：短+長一起上升加分（但不是硬條件）
   if (s.oiDelta5m !== null && s.oiDelta4h !== null) {
     if (s.oiDelta5m > 0 && s.oiDelta4h > 0) score += 6;
     if (s.oiDelta5m < 0 && s.oiDelta4h < 0) score -= 4;
   }
 
-  // funding/premium：做多不希望 premium 太高（過熱），但 funding < 0 可加分
   if (s.fundingPct !== null && s.fundingPct < 0) score += 3;
   if (s.premiumPct !== null && Math.abs(s.premiumPct) > 0.25) score -= 2;
 
-  // anti chase penalty
   if (antiChase) score -= 18;
-
-  // 如果 5m 漲幅太負（下跌中），扣分
   if (s.ret5mPct !== null && s.ret5mPct < -0.6) score -= 6;
 
   s.preScore = clamp(score, 0, 100);
@@ -682,23 +691,26 @@ function deriveSymbol(sym) {
    Candidate selection (Top20) - LONG ONLY
 =========================== */
 function buildTop20Candidates() {
+  computeCrossSectionZ(); // ✅ FAST：先把橫斷面 z 算好
+  updateWarmLabel();
+
   const ex = new Set([...CONFIG.TOPCAP_EXCLUDE, ...CONFIG.EXCLUDE_EXTRA]);
 
-  // 前端只挑「有料」：長多偏好 + 異常
   const arr = universe
     .filter(sym => !ex.has(sym))
     .map(sym => symState[sym])
     .filter(s => s && s.price !== null)
     .filter(s => {
-      // LONG ONLY filter: delta>0 + imbalance>0.5
+      const T = activeThresh(s);
+
+      // LONG ONLY: delta>0 + imbalance > 0.5
       const longBias = (s.delta5mNotional !== null && s.delta5mNotional > 0) &&
-                       (s.imbalance5m !== null && s.imbalance5m >= 0.52);
+                       (s.imbalance5m !== null && s.imbalance5m >= (0.5 + T.imbalanceMin));
       if (!longBias) return false;
 
-      // 有料門檻（你要更兇就提高）
-      if (s.preScore < CONFIG.THRESH.preScoreMin) return false;
+      if (s.preScore < T.preScoreMin) return false;
 
-      // 不要冷卻（熱機中可以保留）
+      // 不要冷卻
       if (s.stage === "冷卻") return false;
 
       return true;
@@ -709,33 +721,30 @@ function buildTop20Candidates() {
   candidatesTop20 = arr.map(x => x.symbol);
   $("candN").textContent = candidatesTop20.length;
 
-  // 候選一旦進入 Top20，就補抓一次 Klines + OI（讓 AI 有 ATR/swing/風控用）
-  for (const s of candidatesTop20) {
-    ensureKlinesAndOI(s);
-  }
+  // 候選進 Top20 就補抓 Klines+OI
+  for (const sym of candidatesTop20) ensureKlinesAndOI(sym);
 
-  // Debug JSON (Top20 summaries)
-  const summaries = candidatesTop20.map(sym => buildSummary(sym));
+  const summaries = candidatesTop20.map(sym => buildSummary(sym)).filter(Boolean);
   $("debugJSON").textContent = JSON.stringify({ top20: summaries }, null, 2);
 }
 
-/* ===========================
-   Summary sent to AI (Top20)
-=========================== */
 function buildSummary(sym) {
   const s = symState[sym];
   if (!s) return null;
+
+  const vzEff = (s.volZ5m !== null) ? s.volZ5m : s.volZcs;
+  const dzEff = (s.deltaZ5m !== null) ? s.deltaZ5m : s.deltaZcs;
 
   return {
     symbol: s.symbol,
     price: s.price,
 
-    // 핵심：你要的指標
     ret5m_pct: s.ret5mPct,
     vol5m_notional: s.vol5mNotional,
-    volZ_5m: s.volZ5m,
+    volZ_5m: vzEff,
+
     active_buy_delta_5m_notional: s.delta5mNotional,
-    active_buy_imbalance_5m: (s.imbalance5m !== null) ? (s.imbalance5m - 0.5) * 2 : null, // -1~+1（偏多>0）
+    active_buy_imbalance_5m: (s.imbalance5m !== null) ? (s.imbalance5m - 0.5) * 2 : null,
 
     funding_pct: s.fundingPct,
     premium_pct: s.premiumPct,
@@ -743,7 +752,6 @@ function buildSummary(sym) {
     oi_delta_5m: s.oiDelta5m,
     oi_delta_4h: s.oiDelta4h,
 
-    // ✅ 你要求補齊的 4 個風控/進出場基礎（前端算好，不丟整包K線）
     atr14: s.atr14,
     swing_low_20: s.swingLow20,
     swing_high_20: s.swingHigh20,
@@ -754,7 +762,10 @@ function buildSummary(sym) {
 
     stage: s.stage,
     preScore: s.preScore,
-    tags: s.tags
+    tags: s.tags,
+
+    warmup_mode: !isSelfHistoryReady(s),
+    hist_buckets: s.histBuckets
   };
 }
 
@@ -769,7 +780,7 @@ async function groqChatCompletion({ apiKey, model, messages, maxOut = 420 }) {
     temperature: 0.2,
     top_p: 0.9,
     max_completion_tokens: maxOut,
-    response_format: { type: "json_object" }  // 最穩（避免 400）
+    response_format: { type: "json_object" }
   };
 
   const res = await fetch(url, {
@@ -799,21 +810,13 @@ async function groqChatCompletion({ apiKey, model, messages, maxOut = 420 }) {
 function buildAiPrompt(top20Summaries) {
   const system = `
 你是加密合約「只做多」交易助手。
-目標：從候選列表中挑出最可能在 5~30 分鐘內「向上表態」且「不追價」的標的，並輸出可執行的交易計畫。
-強制要求：
-- 只輸出一個 JSON 物件（不要任何多餘文字、不要 Markdown code fence）
-- 必須輸出 top5 陣列，長度=5（若不足就用 confidence 低但仍補滿）
-- 每個標的必填欄位：symbol, score(0-100), confidence(0-100), eta_minutes("5-15"/"10-30"/"30-60"), stage("蓄勢"/"點火"/"觸發"/"追價風險"), entry, stop, takeProfit[], invalidation, reasons[], risks[]
-- 你只能使用提供的摘要數據（不要假裝看過K線圖）
-- 若資料不足，也要用 swing_low_20 / swing_high_20 / atr14 推出「合理」的 entry/stop/tp
-- 避免追價：若 ret5m_pct 過高或 dist_sma20_atr 過大，stage 請標 "追價風險" 並降低 score/confidence
-
-entry 格式：
-entry: { type: "limit"|"market"|"stop-limit", zone: [p1,p2], trigger: "文字", logic:"文字" }
-stop 格式：
-stop: { price: number, logic:"文字" }
-takeProfit 格式（2~3 段）：
-takeProfit: [{ price:number, pct:number, logic:"文字" }, ...]  // pct 是出場比例（0-100）
+目標：從候選列表挑出最可能在 5~30 分鐘內「向上表態」且「不追價」的標的，並輸出可執行交易計畫。
+強制：只輸出單一 JSON 物件（不可有任何多餘文字）
+必須輸出 top5（長度=5）
+每檔必填：symbol, score(0-100), confidence(0-100), eta_minutes("5-15"/"10-30"/"30-60"),
+stage("蓄勢"/"點火"/"觸發"/"追價風險"), entry, stop, takeProfit[], invalidation, reasons[], risks[]
+你只能使用提供的摘要，不可假裝看圖。
+若資料不足，也要用 swing_low_20 / swing_high_20 / atr14 推出合理 entry/stop/tp。
   `.trim();
 
   const user = {
@@ -829,7 +832,6 @@ takeProfit: [{ price:number, pct:number, logic:"文字" }, ...]  // pct 是出�
 }
 
 function normalizeAiPick(sym, summary, pick) {
-  // 若 AI 漏欄位：用前端的 swing/atr 填入「保底」值，避免你看到一堆 '-'
   const price = summary.price || 0;
   const atr = summary.atr14 || (price * 0.002);
   const low = summary.swing_low_20 || (price - 2*atr);
@@ -854,16 +856,14 @@ function normalizeAiPick(sym, summary, pick) {
     notes: pick.notes || ""
   };
 
-  // Fill entry/stop/tp if missing
   if (!out.entry) {
-    // 蓄勢/點火：偏向 limit zone；觸發：可 market/stop-limit
     const z1 = price * 0.998;
     const z2 = price * 0.994;
     out.entry = {
       type: (summary.stage === "觸發") ? "market" : "limit",
       zone: [Number(z1.toFixed(8)), Number(z2.toFixed(8))].sort((a,b)=>a-b),
       trigger: (summary.stage === "觸發") ? "觸發階段可市價分批進" : "等待回踩/不追價，落入區間分批",
-      logic: "用 5m 主動買差額 + 量能異常 做前置，避免追價"
+      logic: "用量能+主動買差額當前-續力，避免追價"
     };
   }
 
@@ -890,9 +890,6 @@ function normalizeAiPick(sym, summary, pick) {
   return out;
 }
 
-/* ===========================
-   AI runner (Top20 -> Top5)
-=========================== */
 async function runAIOnce(force=false) {
   const now = Date.now();
   if (!force) {
@@ -901,17 +898,15 @@ async function runAIOnce(force=false) {
     if (now - lastAiTs < CONFIG.AI_INTERVAL_MS) return;
   }
 
-  // 必須有 Top20 才跑
   const top20 = candidatesTop20.slice(0, CONFIG.CANDIDATE_LIMIT);
   if (top20.length < CONFIG.CANDIDATE_LIMIT) {
     setStatus("aiStatus", `等待 Top20 成形（目前 ${top20.length}）`, "warn");
     return;
   }
 
-  // "續力才訪問AI"：至少要有幾個不是冷卻/追價風險
-  const goodCount = top20.map(s => symState[s]).filter(x => x && ["蓄勢","點火","觸發"].includes(x.stage)).length;
+  const goodCount = top20.map(s => symState[s]).filter(x => x && ["蓄勢","點火","觸發","熱機中"].includes(x.stage)).length;
   if (goodCount < 3) {
-    setStatus("aiStatus", `續力不足（蓄勢/點火/觸發 < 3），暫不打AI`, "warn");
+    setStatus("aiStatus", `續力不足（可盯標的 < 3），暫不打AI`, "warn");
     return;
   }
 
@@ -922,24 +917,19 @@ async function runAIOnce(force=false) {
   setStatus("aiStatus", "AI 分析中…", "warn");
 
   const summaries = top20.map(sym => buildSummary(sym)).filter(Boolean);
-
-  // 你要知道 AI 吃什麼：這裡就是完整輸入
   $("debugJSON").textContent = JSON.stringify({ top20: summaries }, null, 2);
 
   try {
     const messages = buildAiPrompt(summaries);
     const obj = await groqChatCompletion({ apiKey:key, model, messages, maxOut: 420 });
 
-    // expect { top5:[...] }
     const top5Raw = Array.isArray(obj.top5) ? obj.top5 : [];
     if (!top5Raw.length) throw new Error("AI JSON 缺 top5");
 
-    // normalize + map by symbol
     const by = {};
     const picks = [];
-
-    // 只接受在 top20 內的 symbol；不足就補
     const top20Set = new Set(top20);
+
     for (const p of top5Raw) {
       const sym = (p.symbol || "").toUpperCase();
       if (!top20Set.has(sym)) continue;
@@ -950,7 +940,6 @@ async function runAIOnce(force=false) {
       if (picks.length >= CONFIG.TOP5_LIMIT) break;
     }
 
-    // 若 AI 沒補滿 5 檔：用前端 prescore 補
     if (picks.length < CONFIG.TOP5_LIMIT) {
       const remain = summaries
         .filter(x => !by[x.symbol])
@@ -963,13 +952,11 @@ async function runAIOnce(force=false) {
       }
     }
 
-    // 排序：先用 AI score，再用 confidence
     picks.sort((a,b) => (b.score - a.score) || (b.confidence - a.confidence));
 
     aiTop5 = picks;
     aiBySymbol = by;
 
-    // Pinned #1：除非有更強（分數高很多/信心高很多）才換
     const top1 = picks[0];
     if (!pinnedTop1.symbol) {
       pinnedTop1 = { symbol: top1.symbol, score: top1.score, confidence: top1.confidence, ts: Date.now() };
@@ -977,7 +964,6 @@ async function runAIOnce(force=false) {
       const dt = Date.now() - pinnedTop1.ts;
       const same = pinnedTop1.symbol === top1.symbol;
       const stronger = (top1.score >= pinnedTop1.score + 4) || (top1.confidence >= pinnedTop1.confidence + 8);
-      // 至少追蹤 90 秒，除非明顯更強才換
       if (!same && (stronger || dt > 90*1000)) {
         pinnedTop1 = { symbol: top1.symbol, score: top1.score, confidence: top1.confidence, ts: Date.now() };
       }
@@ -991,7 +977,6 @@ async function runAIOnce(force=false) {
     const msg = String(e?.message || e);
     console.error(e);
 
-    // backoff for 429
     if (msg.includes("429")) {
       aiBackoffUntil = Date.now() + 45*1000;
       setStatus("aiStatus", "AI 429 限流，backoff 45s", "bad");
@@ -1028,7 +1013,7 @@ async function testAI() {
 }
 
 /* ===========================
-   Render: Top5 cards (AI selected)
+   Render: Top5 cards
 =========================== */
 function stageClass(stage) {
   if (stage === "蓄勢") return "stage-setup";
@@ -1047,7 +1032,6 @@ function renderTop5Cards() {
 
   const pinned = pinnedTop1.symbol;
 
-  // 讓 pinned #1 固定排第一（除非 AI top1 就是它）
   let list = [...aiTop5];
   if (pinned) {
     const idx = list.findIndex(x => x.symbol === pinned);
@@ -1058,185 +1042,123 @@ function renderTop5Cards() {
   }
 
   for (const p of list) {
-    const s = symState[p.symbol];
-    const sum = s ? buildSummary(p.symbol) : null;
+    const sum = buildSummary(p.symbol);
     const isTop1 = (p.symbol === pinned);
-
-    const card = document.createElement("div");
-    card.className = `card p-4 ${isTop1 ? "card-top1" : ""}`;
 
     const tags = (sum?.tags || []).slice(0,6).map(t => `<span class="badge px-2 py-1 rounded-lg tiny2">${t}</span>`).join(" ");
     const stage = sum?.stage || p.stage || "-";
 
-    // left: numbers
-    const left = `
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <div class="text-white font-black text-xl">${p.symbol}</div>
-          <div class="tiny muted mt-1">
-            價格: <b class="text-zinc-200">${fmt(sum?.price, 6)}</b>
-            <span class="mx-2 muted">|</span>
-            5m漲跌: <b class="${(sum?.ret5m_pct||0)>=0 ? "ok":"bad"}">${fmt(sum?.ret5m_pct,2)}%</b>
-            <span class="mx-2 muted">|</span>
-            前端分: <b>${fmt(sum?.preScore,0)}</b>
-          </div>
-          <div class="tiny mt-2 ${stageClass(stage)} font-bold">階段：${stage}</div>
-        </div>
+    const card = document.createElement("div");
+    card.className = `card p-4 ${isTop1 ? "card-top1" : ""}`;
 
-        <div class="flex gap-2">
-          <button class="btn tiny btn-blue" onclick="analyzeSingle('${p.symbol}')">AI 重分析</button>
-        </div>
-      </div>
-
-      <div class="mt-3 flex flex-wrap gap-2">${tags || `<span class="muted tiny">tags: -</span>`}</div>
-
-      <div class="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-        <div class="kv tiny">量能Z(5m): <b>${fmt(sum?.volZ_5m,2)}</b></div>
-        <div class="kv tiny">主動買差額(5m): <b>${fmt(sum?.active_buy_delta_5m_notional,0)}</b></div>
-        <div class="kv tiny">主動買入比(5m): <b>${fmt(((sum?.active_buy_imbalance_5m ?? null)===null)?null:(0.5 + (sum.active_buy_imbalance_5m/2)),3)}</b></div>
-
-        <div class="kv tiny">OIΔ(5m): <b>${fmt(sum?.oi_delta_5m,2)}</b></div>
-        <div class="kv tiny">OIΔ(4h): <b>${fmt(sum?.oi_delta_4h,2)}</b></div>
-        <div class="kv tiny">資金費率(%): <b>${fmt(sum?.funding_pct,3)}</b> / premium(%): <b>${fmt(sum?.premium_pct,3)}</b></div>
-
-        <div class="kv tiny">ATR14: <b>${fmt(sum?.atr14,6)}</b></div>
-        <div class="kv tiny">SwingLow20: <b>${fmt(sum?.swing_low_20,6)}</b></div>
-        <div class="kv tiny">SwingHigh20: <b>${fmt(sum?.swing_high_20,6)}</b></div>
-
-        <div class="kv tiny">Range20(%): <b>${fmt(sum?.range_20_pct,2)}</b></div>
-        <div class="kv tiny">distSMA20/ATR: <b>${fmt(sum?.dist_sma20_atr,2)}</b></div>
-        <div class="kv tiny">SMA20: <b>${fmt(sum?.sma20,6)}</b></div>
-      </div>
-    `;
-
-    // right: AI text
-    const tpText = (p.takeProfit || []).slice(0,3).map(tp => {
-      return `TP ${fmt(tp.price,6)}（${fmt(tp.pct,0)}%）`;
-    }).join(" / ");
-
+    const tpText = (p.takeProfit || []).slice(0,3).map(tp => `TP ${fmt(tp.price,6)}（${fmt(tp.pct,0)}%）`).join(" / ");
     const reasons = (p.reasons||[]).slice(0,4).map(x=>`• ${x}`).join("\n") || "• -";
     const risks = (p.risks||[]).slice(0,4).map(x=>`• ${x}`).join("\n") || "• -";
-
     const entryZone = p.entry?.zone ? `${fmt(p.entry.zone[0],6)} ~ ${fmt(p.entry.zone[1],6)}` : "-";
-    const aiBox = `
-      <div class="ai-box">
-        <div class="flex items-center justify-between">
-          <div class="text-white font-bold">AI 建議（中文）</div>
-          <div class="tiny muted">模型：${$("modelSel").value}</div>
-        </div>
-
-        <div class="mt-2 tiny">
-          方向：<b class="ok">做多</b>
-          <span class="mx-2 muted">|</span>
-          分數：<b>${fmt(p.score,0)}</b>
-          <span class="mx-2 muted">|</span>
-          信心：<b>${fmt(p.confidence,0)}/100</b>
-        </div>
-
-        <div class="mt-1 tiny">
-          ETA：<b>${p.eta_minutes || "-"}</b>
-          <span class="mx-2 muted">|</span>
-          階段：<b class="${stageClass(p.stage)}">${p.stage || "-"}</b>
-        </div>
-
-        <div class="hr my-2"></div>
-
-        <div class="tiny"><b>進場</b>：${p.entry?.type || "-"} | 區間：<b>${entryZone}</b></div>
-        <div class="tiny muted">觸發：${p.entry?.trigger || "-"}</div>
-
-        <div class="mt-1 tiny"><b>停損</b>：<b class="bad">${fmt(p.stop?.price,6)}</b></div>
-        <div class="tiny muted">失效：${p.invalidation || "-"}</div>
-
-        <div class="mt-1 tiny"><b>止盈</b>：${tpText || "-"}</div>
-
-        <div class="hr my-2"></div>
-        <div class="tiny"><b>理由</b>：</div>
-        <pre class="tiny2 whitespace-pre-wrap muted">${reasons}</pre>
-        <div class="tiny"><b>風險</b>：</div>
-        <pre class="tiny2 whitespace-pre-wrap muted">${risks}</pre>
-
-        <div class="tiny muted mt-2">更新：${nowStr()}</div>
-      </div>
-    `;
 
     card.innerHTML = `
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div>${left}</div>
-        <div>${aiBox}</div>
+        <div>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-white font-black text-xl">${p.symbol}</div>
+              <div class="tiny muted mt-1">
+                價格: <b class="text-zinc-200">${fmt(sum?.price, 6)}</b>
+                <span class="mx-2 muted">|</span>
+                5m漲跌: <b class="${(sum?.ret5m_pct||0)>=0 ? "ok":"bad"}">${fmt(sum?.ret5m_pct,2)}%</b>
+                <span class="mx-2 muted">|</span>
+                前端分: <b>${fmt(sum?.preScore,0)}</b>
+              </div>
+              <div class="tiny mt-2 ${stageClass(stage)} font-bold">階段：${stage}</div>
+            </div>
+          </div>
+
+          <div class="mt-3 flex flex-wrap gap-2">${tags || `<span class="muted tiny">tags: -</span>`}</div>
+
+          <div class="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div class="kv tiny">量能Z(5m): <b>${fmt(sum?.volZ_5m,2)}</b></div>
+            <div class="kv tiny">主動買差額(5m): <b>${fmt(sum?.active_buy_delta_5m_notional,0)}</b></div>
+            <div class="kv tiny">主動買入比(5m): <b>${fmt(((sum?.active_buy_imbalance_5m ?? null)===null)?null:(0.5 + (sum.active_buy_imbalance_5m/2)),3)}</b></div>
+
+            <div class="kv tiny">OIΔ(5m): <b>${fmt(sum?.oi_delta_5m,2)}</b></div>
+            <div class="kv tiny">OIΔ(4h): <b>${fmt(sum?.oi_delta_4h,2)}</b></div>
+            <div class="kv tiny">資金費率(%): <b>${fmt(sum?.funding_pct,3)}</b> / premium(%): <b>${fmt(sum?.premium_pct,3)}</b></div>
+
+            <div class="kv tiny">ATR14: <b>${fmt(sum?.atr14,6)}</b></div>
+            <div class="kv tiny">SwingLow20: <b>${fmt(sum?.swing_low_20,6)}</b></div>
+            <div class="kv tiny">SwingHigh20: <b>${fmt(sum?.swing_high_20,6)}</b></div>
+
+            <div class="kv tiny">Range20(%): <b>${fmt(sum?.range_20_pct,2)}</b></div>
+            <div class="kv tiny">distSMA20/ATR: <b>${fmt(sum?.dist_sma20_atr,2)}</b></div>
+            <div class="kv tiny">Warmup: <b>${sum?.warmup_mode ? "FAST" : "SELF"}</b> | hist: <b>${sum?.hist_buckets ?? 0}</b></div>
+          </div>
+        </div>
+
+        <div class="ai-box">
+          <div class="flex items-center justify-between">
+            <div class="text-white font-bold">AI 建議（中文）</div>
+            <div class="tiny muted">模型：${$("modelSel").value}</div>
+          </div>
+
+          <div class="mt-2 tiny">
+            方向：<b class="ok">做多</b>
+            <span class="mx-2 muted">|</span>
+            分數：<b>${fmt(p.score,0)}</b>
+            <span class="mx-2 muted">|</span>
+            信心：<b>${fmt(p.confidence,0)}/100</b>
+          </div>
+
+          <div class="mt-1 tiny">
+            ETA：<b>${p.eta_minutes || "-"}</b>
+            <span class="mx-2 muted">|</span>
+            階段：<b class="${stageClass(p.stage)}">${p.stage || "-"}</b>
+          </div>
+
+          <div class="hr my-2"></div>
+
+          <div class="tiny"><b>進場</b>：${p.entry?.type || "-"} | 區間：<b>${entryZone}</b></div>
+          <div class="tiny muted">觸發：${p.entry?.trigger || "-"}</div>
+
+          <div class="mt-1 tiny"><b>停損</b>：<b class="bad">${fmt(p.stop?.price,6)}</b></div>
+          <div class="tiny muted">失效：${p.invalidation || "-"}</div>
+
+          <div class="mt-1 tiny"><b>止盈</b>：${tpText || "-"}</div>
+
+          <div class="hr my-2"></div>
+          <div class="tiny"><b>理由</b>：</div>
+          <pre class="tiny2 whitespace-pre-wrap muted">${reasons}</pre>
+          <div class="tiny"><b>風險</b>：</div>
+          <pre class="tiny2 whitespace-pre-wrap muted">${risks}</pre>
+
+          <div class="tiny muted mt-2">更新：${nowStr()}</div>
+        </div>
       </div>
     `;
-
     wrap.appendChild(card);
   }
 }
 
-async function analyzeSingle(sym) {
-  const key = $("aiKey").value.trim();
-  if (!key) return alert("請先輸入 Groq API Key");
-  const model = $("modelSel").value;
-
-  const sum = buildSummary(sym);
-  if (!sum) return alert("資料尚未就緒");
-
-  setStatus("aiStatus", `AI 單幣分析中: ${sym}`, "warn");
-
-  const messages = [
-    {
-      role:"system",
-      content: `
-你是加密合約「只做多」交易助手。只輸出 JSON 物件，不要任何多餘文字。
-必填：symbol, score, confidence, eta_minutes, stage, entry, stop, takeProfit, invalidation, reasons, risks
-`.trim()
-    },
-    { role:"user", content: JSON.stringify({ mode:"LONG_ONLY", candidate: sum }) }
-  ];
-
-  try {
-    const obj = await groqChatCompletion({ apiKey:key, model, messages, maxOut: 360 });
-
-    // obj 可能就是單一 pick 或包在 {pick:...}
-    const pickRaw = obj.pick || obj;
-    const norm = normalizeAiPick(sym, sum, pickRaw);
-
-    aiBySymbol[sym] = norm;
-
-    // 若此幣在 top5 內，更新它；不在就不動榜
-    const idx = aiTop5.findIndex(x => x.symbol === sym);
-    if (idx >= 0) aiTop5[idx] = norm;
-
-    setStatus("aiStatus", `AI OK: ${sym}`, "ok");
-    renderTop5Cards();
-  } catch (e) {
-    console.error(e);
-    setStatus("aiStatus", "AI FAIL: " + (e?.message || e).slice(0,80), "bad");
-    alert("AI FAIL: " + (e?.message || e));
-  }
-}
-
 /* ===========================
-   Global miniTicker (heartbeat)
+   miniTicker
 =========================== */
 function startMiniTicker() {
-  // 這個只是保活 + 顯示 Binance OK，不靠它算指標（指標靠 aggTrade + REST）
   const ws = new WebSocket("wss://fstream.binance.com/ws/!miniTicker@arr");
   wsMini = ws;
 
   ws.onopen = () => {
     $("hb").classList.add("hb-on");
-    setStatus("binStatus","miniTicker OK","ok");
+    setStatus("binStatus","WS OK","ok");
   };
-  ws.onerror = () => setStatus("binStatus","miniTicker error","warn");
+  ws.onerror = () => setStatus("binStatus","WS error","warn");
   ws.onclose = () => {
-    setStatus("binStatus","miniTicker closed","warn");
+    setStatus("binStatus","WS closed","warn");
     setTimeout(() => startMiniTicker(), 1200);
   };
-  ws.onmessage = () => {
-    $("lastTick").textContent = nowStr();
-  };
+  ws.onmessage = () => { $("lastTick").textContent = nowStr(); };
 }
 
 /* ===========================
-   Main loops
+   Main
 =========================== */
 async function boot() {
   loadKey();
@@ -1247,38 +1169,25 @@ async function boot() {
 
   startMiniTicker();
 
-  // initial
   await refreshPremiumAll().catch(()=>{});
   await refreshUniverse().catch(e => console.error(e));
 
-  // periodic premium
   setInterval(() => refreshPremiumAll().catch(()=>{}), 60*1000);
-
-  // universe refresh
   setInterval(() => refreshUniverse().catch(()=>{}), CONFIG.UNIVERSE_REFRESH_MS);
 
-  // candidate selection refresh
   setInterval(() => {
     buildTop20Candidates();
-    // 如果 AI 之前已經有 top5，就持續渲染（即使不跑AI）
     if (aiTop5.length) renderTop5Cards();
   }, CONFIG.CANDIDATE_REFRESH_MS);
 
-  // OI refresh for candidates (每 60s)
   setInterval(() => {
-    for (const sym of candidatesTop20) {
-      ensureKlinesAndOI(sym);
-    }
+    for (const sym of candidatesTop20) ensureKlinesAndOI(sym);
   }, 60*1000);
 
-  // auto AI
   setInterval(() => runAIOnce(false), 1500);
-
-  // first AI soon after candidates ready
   setTimeout(() => runAIOnce(true), 8000);
 }
 
-// start
 boot();
 </script>
 </body>

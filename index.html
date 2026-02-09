@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>🔱 TRIDENT V9.0 - FINAL</title>
+    <title>🔱 TRIDENT V10.0 QUICK STRIKE</title>
     <style>
         :root { --bg: #050505; --card: #0d0d0d; --accent: #00ffcc; --text: #f0f0f0; --purple: #d400ff; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 10px; margin: 0; }
@@ -16,7 +16,7 @@
     </style>
 </head>
 <body>
-    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V9.0 DIRECTION</span></h1></div>
+    <div class="header"><h1>🔱 TRIDENT <span style="color:var(--accent)">V10.0 FINAL</span></h1></div>
     <div id="sniper-deck"></div>
 
     <script>
@@ -47,8 +47,8 @@
                     if (market[t.s]) {
                         market[t.s].price = t.c;
                         market[t.s].change = t.P;
-                        market[t.s].hist.push(parseFloat(t.c));
-                        if(market[t.s].hist.length > 30) market[t.s].hist.shift();
+                        market[t.s].hist.push(parseFloat(t.c).toFixed(4));
+                        if(market[t.s].hist.length > 20) market[t.s].hist.shift();
                     }
                 });
                 render();
@@ -70,37 +70,34 @@
                         <span class="symbol">${item.s}</span>
                         <span class="funding ${isAlert ? 'alert-purple' : ''}">FD: ${item.fd.toFixed(4)}%</span>
                     </div>
-                    <div style="margin:10px 0; font-size:0.9rem;">現價: ${item.price} | 24H: ${item.change}%</div>
-                    <div class="ai-box" id="ai-${item.s}">>> 等待觸發門檻...</div>
+                    <div style="margin:10px 0; font-size:0.9rem;">現價: ${item.price} | 24H漲跌: ${item.change}%</div>
+                    <div class="ai-box" id="ai-${item.s}">>> 系統掃描中...</div>
                 `;
                 deck.appendChild(card);
 
                 const slope = item.hist.length > 10 ? ((item.hist[item.hist.length-1] - item.hist[0]) / item.hist[0] * 100) : 0;
                 if ((isAlert || Math.abs(slope) > 0.1) && !isAiBusy && (!lastAiTime[item.s] || Date.now() - lastAiTime[item.s] > 60000)) {
-                    runFinalAI(item, slope);
+                    runQuickStrikeAI(item, slope);
                 }
             });
         }
 
-        async function runFinalAI(item, slope) {
+        async function runQuickStrikeAI(item, slope) {
             isAiBusy = true;
             lastAiTime[item.s] = Date.now();
             const box = document.getElementById(`ai-${item.s}`);
-            box.innerText = ">> [時空定向分析中] 判斷方向與表態時間...";
+            box.innerText = ">> [定向狙擊中] 正在判斷多空與表態時間...";
 
             try {
                 const oiRes = await fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${item.s}`).then(r => r.json());
                 const oiVal = (parseFloat(oiRes.openInterest) / 1000000).toFixed(1) + "M";
-                const priceSeries = item.hist.join(",");
 
                 const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": "Bearer " + GROQ_KEY, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-70b-8192",
-                        messages: [
-                            { role: "user", content: `你是狙擊手。標的:${item.s}, 走勢:[${priceSeries}], OI:${oiVal}, 資費:${item.fd.toFixed(4)}%。請回報：1.明確方向(多/空) 2.預計多久表態 3.主力意圖 4.勝率%。繁中。` }
-                        ],
+                        messages: [{ role: "user", content: `你是職業操盤手。標的:${item.s}, 走勢序列:[${item.hist.join(",")}], OI:${oiVal}, 資費:${item.fd.toFixed(4)}%。請回報：1.明確方向(多/空) 2.預計多久表態 3.勝率%。繁體中文。` }],
                         temperature: 0.1
                     })
                 });
@@ -109,18 +106,26 @@
                 const result = data.choices[0].message.content;
                 box.innerText = ">> " + result;
 
-                if (result.includes("90") || result.includes("高勝率")) {
-                    sendPushover(result, item.s);
+                // 判斷勝率 90% 以上或關鍵字則推送
+                if (result.includes("9") || result.includes("高勝率")) {
+                    const direction = result.includes("多") ? "【多】" : (result.includes("空") ? "【空】" : "【診斷】");
+                    const winRateMatch = result.match(/勝率.*?(\d+%)/);
+                    const winRate = winRateMatch ? winRateMatch[1] : "";
+                    
+                    sendPushover(result, `${direction} ${item.s} - ${winRate}`);
                 }
-            } catch (err) { box.innerText = "❌ 請求失敗，請確認橘色外掛為 ON。"; }
-            finally { setTimeout(() => { isAiBusy = false; }, 8000); }
+            } catch (err) {
+                box.innerText = "❌ 請求失敗，請確認外掛為 ON。";
+            } finally {
+                setTimeout(() => { isAiBusy = false; }, 8000);
+            }
         }
 
-        function sendPushover(msg, symbol) {
+        function sendPushover(msg, title) {
             fetch("https://api.pushover.net/1/messages.json", {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=🔱 定向訊號:${symbol}`
+                body: `token=${PUSHOVER_TOKEN}&user=${PUSHOVER_USER}&message=${encodeURIComponent(msg)}&title=${encodeURIComponent(title)}`
             });
         }
         init();

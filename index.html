@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TRIDENT V7.6 - 5K Swing Mode (5m warmup + BTC + Liq + AI stability)</title>
+  <title>TRIDENT V7.7 - 5K Swing Mode (5m warmup true + BTC + Liq + AI stable + gpt-oss safe)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
@@ -48,9 +48,9 @@
     <div class="flex items-center gap-3">
       <span id="hb" class="heartbeat"></span>
       <div>
-        <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7.6</span></div>
+        <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7.7</span></div>
         <div class="tiny muted font-bold tracking-widest uppercase">
-          LONG ONLY / 5K小波段模式 / 熱機 5min / ✅BTC相對強弱 ✅Liquidation feed ✅delta slope(15m) ✅AI防打架
+          LONG ONLY / 5K小波段模式 / 熱機 5min(真) / ✅BTC相對 ✅Liq feed ✅delta slope(15m) ✅AI防打架 ✅gpt-oss不再400
         </div>
       </div>
     </div>
@@ -96,7 +96,7 @@
     </div>
 
     <div class="tiny muted">
-      5K小波段：候選需「熱機 >=5min + 至少1個完整5m bucket + klinesReady」才會進 Top10 / 送AI。
+      ✅ 真 5min 熱機：只要 (now-firstSeen)>=5min 即可進 Top10；不再卡「完整 bucket」。AI 需 TopN≥8 才送。
     </div>
   </div>
 
@@ -117,7 +117,7 @@
 
 <script>
 /* ===========================
-   CONFIG (V7.6 5K Swing Mode)
+   CONFIG (V7.7)
 =========================== */
 const CONFIG = {
   LONG_ONLY: true,
@@ -133,9 +133,9 @@ const CONFIG = {
   AI_INPUT_SIZE: 10,
   MIN_AI_POOL: 8,
 
-  // ✅ 熱機 5min + 至少1個完整bucket（5m）
+  // ✅ 真 5 分鐘就能上榜（不再卡完整 bucket）
   WARMUP_MIN_MS: 5 * 60 * 1000,
-  MIN_HIST_BUCKETS: 1,
+  MIN_HIST_BUCKETS: 0,
 
   ROLL_5M_MS: 5 * 60 * 1000,
   BUCKET_5M_MS: 5 * 60 * 1000,
@@ -156,11 +156,12 @@ const CONFIG = {
     range20PctMax: 3.2
   },
 
+  // 放寬，避免永遠湊不滿
   THRESH: {
-    volZMin: 0.5,
-    deltaNotionalMin: 5000,
+    volZMin: 0.4,
+    deltaNotionalMin: 4000,
     imbalanceMin: 0.02,
-    preScoreMin: 40
+    preScoreMin: 38
   },
 
   TRACKING: {
@@ -168,6 +169,7 @@ const CONFIG = {
     replaceMargin: 2,
   },
 
+  // 保底 TP（你說先讓它跑起來；TP 不用 R 概念的版本我之後再給）
   TP_K: [1.3, 2.6, 4.0],
 
   TOPCAP_EXCLUDE: [
@@ -184,15 +186,7 @@ const CONFIG = {
 
   EXCLUDE_EXTRA: [
     "USDCUSDT","TUSDUSDT","FDUSDUSDT","USDPUSDT","DAIUSDT"
-  ],
-
-  // ✅ 關鍵補丁：預抓 Universe 的 klines/OI（解掉 Top10=0 死鎖）
-  PREFETCH: {
-    N: 30,           // 先抓 Universe 前 N 個
-    BATCH: 6,        // 分批避免限流
-    SLEEP_MS: 180,   // 每批間隔
-    RUN_AFTER_UNIVERSE_REFRESH: true
-  }
+  ]
 };
 
 /* ===========================
@@ -201,8 +195,6 @@ const CONFIG = {
 let AUTO_AI = true;
 let lastAiTs = 0;
 let aiBackoffUntil = 0;
-
-// ✅ AI 防打架 / 去重
 let AI_INFLIGHT = false;
 let lastAiSig = "";
 
@@ -214,7 +206,6 @@ let wsAgg = {};
 let wsMini = null;
 
 let premiumMap = {};
-
 let trackedTopN = [];
 let candidatesTopN = [];
 
@@ -230,10 +221,10 @@ function saveHiddenSet(){ localStorage.setItem("HIDDEN_SET", JSON.stringify(Arra
 
 let pinnedTop1 = { symbol:null, score:-1, confidence:-1, ts:0 };
 
-// ✅ BTC state
+// BTC
 let btcState = { ready:false, ts:0 };
 
-// ✅ Liquidation state
+// Liquidation
 let liq = {};
 let wsLiq = null;
 
@@ -265,6 +256,10 @@ function getModelId(){
   const v = $("modelSel").value;
   if (v === "__custom__") return ($("modelCustom").value || "").trim();
   return v;
+}
+function isGptOssModel(modelId){
+  const m = String(modelId||"").toLowerCase();
+  return m.includes("gpt-oss");
 }
 
 function saveKey() {
@@ -350,20 +345,8 @@ function togglePin(sym) {
 }
 
 /* ===========================
-   DELETE/HIDE + auto replace
+   Hide
 =========================== */
-function signatureOfTop10(summaries) {
-  return summaries.map(s => [
-    s.symbol,
-    Math.round((s.price||0)*1e6),
-    Math.round((s.ret5m_pct||0)*1000),
-    Math.round((s.active_buy_delta_5m_notional||0)),
-    Math.round((s.vol5m_notional||0)),
-    Math.round((s.oi_delta_5m||0)),
-    s.stage
-  ].join(":")).join("|");
-}
-
 function backfillTop5Placeholder() {
   const exist = new Set(aiTop5.map(x => x.symbol));
   const pool = candidatesTopN
@@ -442,6 +425,17 @@ function meanStd(arr) {
   const v = arr.reduce((a,b)=>a+(b-mean)*(b-mean),0) / arr.length;
   const std = Math.sqrt(v);
   return { mean, std };
+}
+function signatureOfTop10(summaries) {
+  return summaries.map(s => [
+    s.symbol,
+    Math.round((s.price||0)*1e6),
+    Math.round((s.ret5m_pct||0)*1000),
+    Math.round((s.active_buy_delta_5m_notional||0)),
+    Math.round((s.vol5m_notional||0)),
+    Math.round((s.oi_delta_5m||0)),
+    s.stage
+  ].join(":")).join("|");
 }
 
 /* ===========================
@@ -535,11 +529,6 @@ async function refreshUniverse() {
   for (const sym of universe) {
     if (!wsAgg[sym]) initAggTrade(sym);
     if (!symState[sym]) initSymbolState(sym);
-  }
-
-  // ✅ 關鍵：刷新 universe 後立刻預抓 klines/OI → 解掉 Top10=0 死鎖
-  if (CONFIG.PREFETCH.RUN_AFTER_UNIVERSE_REFRESH) {
-    prefetchUniverseKlinesOI(CONFIG.PREFETCH.N).catch(()=>{});
   }
 }
 
@@ -663,6 +652,7 @@ function initAggTrade(sym) {
       s.vol5mNotional = curB.notional;
       s.delta5mNotional = curB.deltaNotional;
 
+      // ✅ 主動買/賣差額（你要 AI 知道的）
       const total = curB.notional || 0;
       const delta = curB.deltaNotional || 0;
       const buy = (total + delta) / 2;
@@ -671,6 +661,7 @@ function initAggTrade(sym) {
       s.imbalance5m = denom > 0 ? (buy / denom) : null;
     }
 
+    // hist buckets（允許 0）
     const histIds = s.bucketIds.filter(id => id !== bucketId);
     s.histBuckets = histIds.length;
 
@@ -779,27 +770,6 @@ async function ensureKlinesAndOI(sym) {
   } catch {}
 }
 
-/* ===========================
-   ✅ 關鍵補丁：Universe 預抓 klines/OI（解 Top10=0 死鎖）
-=========================== */
-let PREFETCH_LOCK = false;
-async function prefetchUniverseKlinesOI(N = 30) {
-  if (PREFETCH_LOCK) return;
-  PREFETCH_LOCK = true;
-
-  try {
-    const syms = (universe || []).slice(0, N);
-    const BATCH = CONFIG.PREFETCH.BATCH;
-    for (let i = 0; i < syms.length; i += BATCH) {
-      const batch = syms.slice(i, i + BATCH);
-      await Promise.all(batch.map(sym => ensureKlinesAndOI(sym)));
-      await new Promise(r => setTimeout(r, CONFIG.PREFETCH.SLEEP_MS));
-    }
-  } finally {
-    PREFETCH_LOCK = false;
-  }
-}
-
 function computeKlineFeatures(sym, k) {
   const s = symState[sym];
   if (!s || !Array.isArray(k) || k.length < 25) return;
@@ -874,10 +844,7 @@ function computeOIDeltas(sym) {
 
 function utcMidnightMs() {
   const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const d = now.getUTCDate();
-  return Date.UTC(y,m,d,0,0,0,0);
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0,0,0,0);
 }
 
 async function refreshTodayVP(sym) {
@@ -986,7 +953,7 @@ function startLiquidationFeed() {
       const sym = (o?.s || "").toUpperCase();
       if (!sym || !symState[sym]) continue;
 
-      const side = o?.S;
+      const side = o?.S; // BUY/SELL
       const p = parseFloat(o?.p || "0");
       const q = parseFloat(o?.q || "0");
       const notional = p*q;
@@ -1021,7 +988,7 @@ function deriveSymbol(sym) {
 
   const T = CONFIG.THRESH;
 
-  // delta_notional_slope_15m (3 buckets)
+  // delta_notional_slope_15m (用最後 3 個 bucket，包含目前 bucket)
   (function computeDeltaSlope15m(){
     const ids = (s.bucketIds || []).slice(-4);
     if (ids.length < 3) { s.deltaSlope15m = null; return; }
@@ -1041,6 +1008,8 @@ function deriveSymbol(sym) {
     (s.range20Pct !== null && s.range20Pct > CONFIG.ANTI_CHASE.range20PctMax);
 
   const tags = [];
+
+  // ✅ 若 hist 不夠，volZ5m 會是 null → 直接用 cross-section (volZcs/deltaZcs)
   const vzEff = (s.volZ5m !== null) ? s.volZ5m : (s.volZcs ?? null);
   const dzEff = (s.deltaZ5m !== null) ? s.deltaZ5m : (s.deltaZcs ?? null);
 
@@ -1055,7 +1024,7 @@ function deriveSymbol(sym) {
   if (s.fundingPct !== null && s.fundingPct < 0) tags.push("資金費率偏空(利多做多)");
   if (s.range20Pct !== null && s.range20Pct < 0.9) tags.push("窄幅收斂");
   if (s.distToSwingHighPct !== null && s.distToSwingHighPct < 0.35) tags.push("接近突破位");
-  if (s.compressionProxy !== null && s.compressionProxy < 2.2) tags.push("壓縮型態(可能蹲→噴)");
+  if (s.compressionProxy !== null && s.compressionProxy < 2.2) tags.push("壓縮型態(蹲→噴)");
   if (antiChase) tags.push("已急拉/追價風險");
 
   const L = liq[sym];
@@ -1179,7 +1148,7 @@ function updateTrackedTopN(eligibleStates) {
 }
 
 /* ===========================
-   Candidate selection (warmup gates 5min)
+   Candidate selection (true 5m warmup)
 =========================== */
 function buildTrackedTopN() {
   computeCrossSectionZ();
@@ -1193,7 +1162,7 @@ function buildTrackedTopN() {
     .map(sym => symState[sym])
     .filter(s => s && s.price !== null)
     .filter(s => (Date.now() - s.firstSeenTs) >= CONFIG.WARMUP_MIN_MS)
-    .filter(s => (s.histBuckets ?? 0) >= CONFIG.MIN_HIST_BUCKETS)
+    .filter(s => (s.histBuckets ?? 0) >= CONFIG.MIN_HIST_BUCKETS) // ✅ now 0
     .filter(s => s.klinesReady === true)
     .filter(s => {
       const T = CONFIG.THRESH;
@@ -1205,7 +1174,7 @@ function buildTrackedTopN() {
       return true;
     })
     .sort((a,b) => b.preScore - a.preScore)
-    .slice(0, 40);
+    .slice(0, 60);
 
   if (CONFIG.TRACKING?.enabled) updateTrackedTopN(arr);
 
@@ -1224,7 +1193,7 @@ function buildTrackedTopN() {
 }
 
 /* ===========================
-   Summary to AI（完整資料餵AI）
+   Summary to AI (完整資料餵AI)
 =========================== */
 function buildSummary(sym) {
   const s = symState[sym];
@@ -1240,6 +1209,7 @@ function buildSummary(sym) {
     symbol: s.symbol,
     price: s.price,
 
+    // ✅ 你要 AI 知道的「主動買賣差額」與其加速度
     ret5m_pct: s.ret5mPct,
     vol5m_notional: s.vol5mNotional,
     volZ_5m: vzEff,
@@ -1249,11 +1219,13 @@ function buildSummary(sym) {
 
     delta_notional_slope_15m: s.deltaSlope15m,
 
+    // 衍生品
     funding_pct: s.fundingPct,
     premium_pct: s.premiumPct,
     oi_delta_5m: s.oiDelta5m,
     oi_delta_4h: s.oiDelta4h,
 
+    // 結構（5m klines）
     atr14: s.atr14,
     swing_low_20: s.swingLow20,
     swing_high_20: s.swingHigh20,
@@ -1263,6 +1235,7 @@ function buildSummary(sym) {
     dist_to_swing_high_pct: s.distToSwingHighPct,
     compression_proxy: s.compressionProxy,
 
+    // 今日VP
     today_vp: vp ? {
       poc: vp.poc,
       val: vp.val,
@@ -1272,12 +1245,14 @@ function buildSummary(sym) {
       day_range_pct: vp.rangePct
     } : null,
 
+    // liquidation feed（5m窗）
     liquidation_5m: L ? {
       count: L.count5m || 0,
       buy_notional: L.buyNotional5m || 0,
       sell_notional: L.sellNotional5m || 0
     } : null,
 
+    // BTC 對比
     btc: btcState?.ready ? {
       price: btcState.price,
       ret5m_pct: btcState.ret5m,
@@ -1296,7 +1271,7 @@ function buildSummary(sym) {
 }
 
 /* ===========================
-   TP (保底避免AI亂給)
+   TP 保底（先留著）
 =========================== */
 function uniqNums(arr) {
   const out = [];
@@ -1363,18 +1338,36 @@ function computePreciseTPs(summary, entry, stop) {
 }
 
 /* ===========================
-   Groq AI
+   Groq AI (gpt-oss safe)
 =========================== */
+function extractFirstJsonObject(text) {
+  const cleaned = String(text||"")
+    .replace(/^```json\s*/i,"")
+    .replace(/^```\s*/i,"")
+    .replace(/```$/i,"")
+    .trim();
+  const i0 = cleaned.indexOf("{");
+  const i1 = cleaned.lastIndexOf("}");
+  if (i0 < 0 || i1 <= i0) throw new Error("模型 content 找不到完整 JSON");
+  const jsonStr = cleaned.slice(i0, i1 + 1);
+  return JSON.parse(jsonStr);
+}
+
 async function groqChatCompletion({ apiKey, model, messages, maxOut = 450 }) {
   const url = "https://api.groq.com/openai/v1/chat/completions";
+
+  // ✅ gpt-oss：不要用 response_format（避免 Groq 400 json_validate_failed）
   const payload = {
     model,
     messages,
     temperature: 0.12,
     top_p: 0.9,
-    max_completion_tokens: maxOut,
-    response_format: { type: "json_object" }
+    max_completion_tokens: maxOut
   };
+
+  if (!isGptOssModel(model)) {
+    payload.response_format = { type: "json_object" };
+  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -1385,53 +1378,71 @@ async function groqChatCompletion({ apiKey, model, messages, maxOut = 450 }) {
   const raw = await res.text();
   console.log("[Groq] HTTP", res.status, raw);
 
-  if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw.slice(0,200)}`);
+  if (!res.ok) {
+    // ✅ 這裡把 400 直接丟出去，外層會 backoff，不會狂打
+    throw new Error(`Groq HTTP ${res.status}: ${raw.slice(0,260)}`);
+  }
 
   let data;
   try { data = JSON.parse(raw); } catch { throw new Error("Groq 回應不是 JSON"); }
 
   const content = data?.choices?.[0]?.message?.content ?? "";
-  const cleaned = (content || "")
-    .replace(/^```json\s*/i,"")
-    .replace(/^```\s*/i,"")
-    .replace(/```$/i,"")
-    .trim();
-
-  const i0 = cleaned.indexOf("{");
-  const i1 = cleaned.lastIndexOf("}");
-  if (i0 < 0 || i1 <= i0) throw new Error("模型 content 找不到完整 JSON");
-
-  const jsonStr = cleaned.slice(i0, i1 + 1);
-
-  let obj;
-  try { obj = JSON.parse(jsonStr); }
-  catch { throw new Error("模型 content 不是有效 JSON: " + jsonStr.slice(0,200)); }
-
-  return obj;
+  try {
+    return extractFirstJsonObject(content);
+  } catch (e) {
+    // ✅ 若模型沒乖：做一次「修復 JSON」的補救（只做一次，避免你說的打架）
+    const repairMessages = [
+      { role:"system", content:"你是 JSON 修復器。把使用者給的內容轉成『單一 JSON 物件』輸出，不能有任何多餘文字。" },
+      { role:"user", content: JSON.stringify({ need:"valid_json_object_only", raw: String(content).slice(0,8000) }) }
+    ];
+    const res2 = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: repairMessages,
+        temperature: 0,
+        top_p: 1,
+        max_completion_tokens: 400
+      })
+    });
+    const raw2 = await res2.text();
+    console.log("[Groq repair] HTTP", res2.status, raw2);
+    if (!res2.ok) throw new Error(`Groq repair HTTP ${res2.status}: ${raw2.slice(0,260)}`);
+    const data2 = JSON.parse(raw2);
+    const content2 = data2?.choices?.[0]?.message?.content ?? "";
+    return extractFirstJsonObject(content2);
+  }
 }
 
 /* ===========================
-   AI prompts
+   AI prompts（重點：蹲5-20分鐘噴發前夕/中繼）
 =========================== */
 function buildAiPrompt(top10Summaries) {
   const system = `
 你是加密合約「只做多」交易助手。請全部用中文輸出。
-你只看到輸入摘要（不可假裝看K線圖/深度/新聞）。
-目標：從 candidates(最多10) 中選出 top5，偏「噴發前夕（蹲5~20分鐘）或 上漲中繼」：
-- 噴發前夕：compression_proxy 低、dist_to_swing_high_pct 小、delta_notional_slope_15m 正、且 rel_to_btc_5m_pct 為正（BTC弱你強）
-- 中繼：price > sma20、dist_sma20_atr 不大（不追價）、回踩到VP附近且 delta_slope 不轉負
+你只能使用 candidates 摘要（不可假裝看K線圖/深度/新聞/內幕）。
+目標：從 candidates(最多10) 選出 top5，偏「噴發前夕（蹲5~20分鐘）或 上漲中繼」：
 
-【不追價】
-若 ret5m_pct 過高或 dist_sma20_atr 太大，entry 必須改為等待回踩的 limit zone，不可追價。
+【噴發前夕（蹲→噴）偏好】
+- compression_proxy 低（壓縮）
+- dist_to_swing_high_pct 小（靠近突破位）
+- delta_notional_slope_15m > 0（主動買差額加速度）
+- active_buy_delta_5m_notional > 0 且 buy_ratio_5m 偏高
+- rel_to_btc_5m_pct > 0（BTC弱你強）加分
+
+【上漲中繼偏好】
+- price > sma20 但 dist_sma20_atr 不大（不追價）
+- 回踩靠近 VP（today_vp.poc/val）時仍維持 delta_slope 不轉負
 
 【清算/嘎空提示】
-liquidation_5m.buy_notional 高且價格不跌，可能「嘎空/多頭延伸」；反之 sell_notional 高且下跌，注意嘎多。
+liquidation_5m.buy_notional 高且價格不跌 → 可能「嘎空/延伸」；sell_notional 高且下跌 → 注意「嘎多」。
 
-【止盈】
-你可以給止盈，但若你給的不合理，前端會用 VP/前高/ATR 的保底演算法自動修正。
+【不追價】
+若 ret5m_pct 過高或 dist_sma20_atr 太大，entry 必須改成等待回踩的 limit zone，不可追價。
 
-輸出必須是單一 JSON 物件（不要任何多餘文字）。
-JSON 格式：
+輸出必須是「單一 JSON 物件」，不要任何多餘文字、不要 markdown。
+格式：
 {
   "top5":[
     {
@@ -1468,14 +1479,9 @@ function buildAiPromptSingle(symbol, currentSummary, prevAdvice) {
 你是加密合約「只做多」交易助手。請全部用中文輸出。
 你會收到 current（最新摘要）與 previous（上一次建議）。
 任務：針對同一幣種，基於 current 與 previous 的差異，輸出更新後的建議（偏 噴發前夕/中繼）。
+規則同批次：不追價、參考 BTC 相對、liq、delta slope。
 
-【不追價】
-若 ret5m_pct 過高或 dist_sma20_atr 太大，entry 必須改成等待回踩 limit zone。
-
-【清算/嘎空提示】
-liquidation_5m.buy_notional 高且價格不跌 → 可能嘎空/延伸；sell_notional 高且下跌 → 注意嘎多。
-
-輸出必須是單一 JSON 物件（不要多餘文字）：
+輸出必須是「單一 JSON 物件」，不要多餘文字：
 {
   "symbol":"XXXUSDT",
   "score":0-100,
@@ -1508,7 +1514,7 @@ function stageClass(stage) {
 }
 
 /* ===========================
-   Normalize（保留：避免AI亂輸出）
+   Normalize（避免AI亂輸出）
 =========================== */
 function normalizeAiPick(sym, summary, pick) {
   const price = summary.price || 0;
@@ -1556,7 +1562,7 @@ function normalizeAiPick(sym, summary, pick) {
   const tpPack = computePreciseTPs(summary, out.entry, out.stop);
   out.takeProfit = tpPack.tps;
   out.reasons = (out.reasons || []);
-  out.reasons.unshift(`已套用保底止盈：VP/節點/前高 + ATR，避免AI亂給`);
+  out.reasons.unshift(`已套用保底止盈：VP/節點/前高 + ATR（避免模型亂輸出）`);
 
   if (!out.invalidation) out.invalidation = "跌破 stop 或 5m 主動買差額轉負且量能退潮";
   if (!out.reasons.length) out.reasons = ["候選池內綜合較強（orderflow/BTC相對/壓縮/liq）"];
@@ -1566,7 +1572,7 @@ function normalizeAiPick(sym, summary, pick) {
 }
 
 /* ===========================
-   Batch AI + Single AI（防打架、去重、冷卻）
+   Batch AI + Single AI（防打架/去重/冷卻）
 =========================== */
 async function runAIOnce(force=false) {
   if (AI_INFLIGHT) return;
@@ -1670,10 +1676,12 @@ async function runAIOnce(force=false) {
 
     if (msg.includes("429")) {
       setStatus("aiStatus", "AI 429 限流，backoff 45s", "bad");
+    } else if (msg.includes("json_validate_failed")) {
+      setStatus("aiStatus", "AI JSON 驗證失敗(已自動修復策略)，backoff 45s", "bad");
     } else if (msg.includes("JSON") || msg.includes("content")) {
       setStatus("aiStatus", "AI 回傳非完整JSON，backoff 45s", "bad");
     } else {
-      setStatus("aiStatus", "AI FAIL: " + msg.slice(0,80), "bad");
+      setStatus("aiStatus", "AI FAIL: " + msg.slice(0,100), "bad");
     }
   } finally {
     AI_INFLIGHT = false;
@@ -1906,7 +1914,7 @@ function renderTop5Cards() {
           <div class="mt-3 flex flex-wrap gap-2">${tags || `<span class="muted tiny">tags: -</span>`}</div>
 
           <div class="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            <div class="kv tiny">量能Z(5m): <b>${fmt(sum?.volZ_5m,2)}</b></div>
+            <div class="kv tiny">量能Z(5m/CS): <b>${fmt(sum?.volZ_5m,2)}</b></div>
             <div class="kv tiny">主動買差額(5m): <b>${fmt(sum?.active_buy_delta_5m_notional,0)}</b></div>
             <div class="kv tiny">買入比(5m): <b>${fmt(sum?.buy_ratio_5m,3)}</b></div>
 
@@ -2019,9 +2027,6 @@ async function boot() {
   await ensureBTC().catch(()=>{});
   await refreshUniverse().catch(e => console.error(e));
 
-  // ✅ 首次啟動也先預抓一次（保險）
-  await prefetchUniverseKlinesOI(CONFIG.PREFETCH.N).catch(()=>{});
-
   setInterval(() => refreshPremiumAll().catch(()=>{}), 60*1000);
   setInterval(() => refreshUniverse().catch(()=>{}), CONFIG.UNIVERSE_REFRESH_MS);
   setInterval(() => ensureBTC().catch(()=>{}), 60*1000);
@@ -2032,7 +2037,6 @@ async function boot() {
   }, CONFIG.CANDIDATE_REFRESH_MS);
 
   setInterval(() => {
-    // ✅ 候選池為主，降低 API 壓力
     for (const sym of candidatesTopN) ensureKlinesAndOI(sym);
   }, 60*1000);
 
@@ -2040,10 +2044,10 @@ async function boot() {
     for (const sym of candidatesTopN) refreshTodayVP(sym);
   }, CONFIG.VP_REFRESH_MS);
 
-  // ✅ 仍然 1.5s tick，但已經：inflight + 去重sig + backoff，不會狂刷
+  // 1.5s tick：已做 AI_INFLIGHT + backoff + 去重，不會再打架
   setInterval(() => runAIOnce(false), 1500);
 
-  // ✅ 熱機 5 分鐘：先給資料起來，再強制跑一次
+  // 先給資料起來：90 秒後強制跑一次
   setTimeout(() => runAIOnce(true), 90*1000);
 }
 

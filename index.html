@@ -1244,16 +1244,11 @@ function buildSummary(sym) {
 async function groqChatCompletion({ apiKey, model, messages, maxOut = 400 }) {
   const url = "https://api.groq.com/openai/v1/chat/completions";
 
-  // ✅ 關掉 response_format JSON mode，避免 400 json_validate_failed 直接死
-  // ✅ 用 assistant prefill "{" + 強健 JSON 擷取
-  const msgs = Array.isArray(messages) ? [...messages] : [];
-  msgs.push({ role: "assistant", content: "{" });
-
   const payload = {
     model,
-    messages: msgs,
-    temperature: 0.15,
-    top_p: 0.9,
+    messages,
+    temperature: 0,
+    top_p: 1,
     max_completion_tokens: maxOut
   };
 
@@ -1277,25 +1272,39 @@ async function groqChatCompletion({ apiKey, model, messages, maxOut = 400 }) {
   }
 
   let data;
-  try { data = JSON.parse(raw); } catch {
-    throw new Error("Groq 回應不是 JSON（外層）");
-  }
+  try { data = JSON.parse(raw); }
+  catch { throw new Error("Groq 回應不是 JSON（外層）"); }
 
-  let content = data?.choices?.[0]?.message?.content ?? "";
-  content = String(content).trim();
-  if (!content.startsWith("{")) content = "{" + content;
+  let content = String(data?.choices?.[0]?.message?.content ?? "").trim();
 
+  // 清掉可能的 code fence
   content = content
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/```$/i, "")
     .trim();
 
-  const i0 = content.indexOf("{");
-  const i1 = content.lastIndexOf("}");
-  if (i0 < 0 || i1 <= i0) throw new Error("模型 content 找不到完整 JSON：" + content.slice(0,200));
+  // ✅ Robust：從「第一個 {」開始做括號平衡，找到完整 JSON
+  const start = content.indexOf("{");
+  if (start < 0) throw new Error("模型 content 沒有 '{'：" + content.slice(0,200));
 
-  const jsonText = content.slice(i0, i1+1);
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < content.length; i++) {
+    const ch = content[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) { end = i; break; }
+    }
+  }
+
+  if (end < 0) {
+    // 這就是你現在遇到的：只有 "{"
+    throw new Error("模型 content JSON 沒閉合（缺 '}'）： " + content.slice(0,200));
+  }
+
+  const jsonText = content.slice(start, end + 1);
   try { return JSON.parse(jsonText); }
   catch { throw new Error("模型 content 不是有效 JSON：" + jsonText.slice(0,200)); }
 }
@@ -1624,18 +1633,26 @@ async function testAI() {
 
   try {
     setStatus("aiStatus", "Test AI…", "warn");
+
     const obj = await groqChatCompletion({
       apiKey: key,
       model,
-      maxOut: 180,
+      maxOut: 120,
       messages: [
-        { role:"system", content:"你只能輸出 JSON 物件。禁止任何多餘文字、禁止 markdown。" },
-        { role:"user", content: JSON.stringify({ ping:"pong", now: Date.now() }) }
+        { role:"system", content:"只輸出一個 JSON 物件，不要任何解釋，不要 markdown。不允許空輸出。必須輸出：{\"status\":\"ok\"}" },
+        { role:"user", content:"請照指示只輸出 JSON。" }
       ]
     });
+
     console.log("Test AI OK:", obj);
+    if (obj?.status !== "ok") {
+      alert("Test AI 回傳 JSON 但不是 {status:'ok'}，看 Console");
+      setStatus("aiStatus", `Test OK(但格式不同) ${model}`, "warn");
+      return;
+    }
+
     setStatus("aiStatus", `Test OK (${model})`, "ok");
-    alert("Test AI OK（看 Console）");
+    alert("Test AI OK ✅");
   } catch (e) {
     console.error(e);
     setStatus("aiStatus", "Test FAIL", "bad");

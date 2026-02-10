@@ -1352,7 +1352,9 @@ function computePreciseTPs(summary, entry, stop) {
 =========================== */
 async function groqChatCompletion({ apiKey, model, messages, maxOut = 450 }) {
   const url = "https://api.groq.com/openai/v1/chat/completions";
-  const payload = {
+
+  // A) 先用 JSON mode 試一次（如果模型支援，這是最乾淨）
+  const payloadJsonMode = {
     model,
     messages,
     temperature: 0.12,
@@ -1361,38 +1363,62 @@ async function groqChatCompletion({ apiKey, model, messages, maxOut = 450 }) {
     response_format: { type: "json_object" }
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type":"application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify(payload)
-  });
+  // B) fallback：不用 response_format，靠前端擷取 {...} 再 JSON.parse
+  const payloadTextMode = {
+    model,
+    messages,
+    temperature: 0.12,
+    top_p: 0.9,
+    max_completion_tokens: maxOut
+  };
 
-  const raw = await res.text();
-  console.log("[Groq] HTTP", res.status, raw);
+  async function call(payload) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(payload)
+    });
 
-  if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw.slice(0,200)}`);
+    const raw = await res.text();
+    console.log("[Groq] HTTP", res.status, raw);
 
-  let data;
-  try { data = JSON.parse(raw); } catch { throw new Error("Groq 回應不是 JSON"); }
+    if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw}`);
+    const data = JSON.parse(raw);
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    return content;
+  }
 
-  const content = data?.choices?.[0]?.message?.content ?? "";
-  const cleaned = (content || "")
-    .replace(/^```json\s*/i,"")
-    .replace(/^```\s*/i,"")
-    .replace(/```$/i,"")
-    .trim();
+  // 先試 JSON mode
+  try {
+    const content = await call(payloadJsonMode);
+    // JSON mode 理論上就直接是 JSON
+    return JSON.parse(content);
+  } catch (e) {
+    const msg = String(e?.message || e);
+    // 只要遇到 json_validate_failed，就自動降級
+    if (!msg.includes("json_validate_failed")) throw e;
 
-  const i0 = cleaned.indexOf("{");
-  const i1 = cleaned.lastIndexOf("}");
-  if (i0 < 0 || i1 <= i0) throw new Error("模型 content 找不到完整 JSON");
+    console.warn("Groq JSON mode failed, fallback to text mode");
 
-  const jsonStr = cleaned.slice(i0, i1 + 1);
+    const content = await call(payloadTextMode);
 
-  let obj;
-  try { obj = JSON.parse(jsonStr); }
-  catch { throw new Error("模型 content 不是有效 JSON: " + jsonStr.slice(0,200)); }
+    // 你的原本擷取 {...} 的邏輯
+    const cleaned = String(content || "")
+      .replace(/^```json\s*/i,"")
+      .replace(/^```\s*/i,"")
+      .replace(/```$/i,"")
+      .trim();
 
-  return obj;
+    const i0 = cleaned.indexOf("{");
+    const i1 = cleaned.lastIndexOf("}");
+    if (i0 < 0 || i1 <= i0) throw new Error("模型 content 找不到完整 JSON");
+
+    const jsonStr = cleaned.slice(i0, i1 + 1);
+    return JSON.parse(jsonStr);
+  }
 }
 
 /* ===========================
@@ -1727,10 +1753,10 @@ async function testAI() {
       apiKey: key,
       model,
       maxOut: 160,
-      messages: [
-        { role:"system", content:"只輸出 JSON 物件，不要任何多餘文字。" },
-        { role:"user", content: JSON.stringify({ ping:"pong", now: Date.now() }) }
-      ]
+     messages: [
+  { role:"system", content:'Return EXACTLY one JSON object. No markdown. No text. Must be valid JSON.' },
+  { role:"user", content:'{"ok":true}' }
+]
     });
     console.log("Test AI OK:", obj);
     setStatus("aiStatus", `Test OK (${model})`, "ok");

@@ -59,12 +59,12 @@
       <button class="btn btn-green" onclick="saveKey()">Save</button>
       <button class="btn" onclick="clearKey()">Clear</button>
 
-      <select id="modelSel" class="btn">
-        <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
-        <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
-        <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
-        <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-      </select>
+     <select id="modelSel" class="btn">
+  <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
+  <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
+  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+  <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
+</select>
 
       <input id="symSearch" type="text" class="w-[160px] uppercase" placeholder="搜尋幣 (ex: WIF)" />
       <button class="btn btn-amber" onclick="searchAndAdd()">Search & 上榜</button>
@@ -1399,15 +1399,78 @@ function extractJSONObject(text) {
 
 async function groqChatCompletion({ apiKey, model, messages, maxOut = 400 }) {
   const url = "https://api.groq.com/openai/v1/chat/completions";
+
+  // ✅ 1) JSON mode 先不要用：避免模型輸出不合法 JSON 時直接 400 json_validate_failed
+  // ✅ 2) 用「assistant prefill '{'」強迫模型從 JSON 開始
+  const msgs = Array.isArray(messages) ? [...messages] : [];
+  msgs.push({ role: "assistant", content: "{" });
+
   const payload = {
     model,
-    messages,
+    messages: msgs,
     temperature: 0.15,
     top_p: 0.9,
-    max_completion_tokens: maxOut,
-    // 有些模型/情況會忽略，但保留；同時我們已做 robust parser
-    response_format: { type: "json_object" }
+    max_completion_tokens: maxOut
+    // ❌ 不要 response_format: { type:"json_object" }
   };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const raw = await res.text();
+  console.log("[Groq] HTTP", res.status, raw);
+
+  if (!res.ok) {
+    // 把 Groq 可能回的 failed_generation 顯示出來，方便你 debug
+    let errMsg = raw.slice(0, 400);
+    try {
+      const e = JSON.parse(raw);
+      if (e?.error?.failed_generation) errMsg = String(e.error.failed_generation).slice(0, 400);
+      if (e?.error?.message) errMsg = String(e.error.message).slice(0, 400);
+    } catch {}
+    throw new Error(`Groq HTTP ${res.status}: ${errMsg}`);
+  }
+
+  let data;
+  try { data = JSON.parse(raw); } catch {
+    throw new Error("Groq 回應不是 JSON（外層）");
+  }
+
+  // content 可能會有前後雜訊，做「抓第一個 { 到最後一個 }」的強健擷取
+  let content = data?.choices?.[0]?.message?.content ?? "";
+  content = String(content).trim();
+
+  // 由於我們 prefill 了 "{", 有些模型會回剩下的 JSON（不含第一個 {）
+  // 所以如果沒以 { 開頭，就補回去
+  if (!content.startsWith("{")) content = "{" + content;
+
+  // 去掉 ```json code fence（有些模型還是會吐）
+  content = content
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+
+  const i0 = content.indexOf("{");
+  const i1 = content.lastIndexOf("}");
+  if (i0 < 0 || i1 <= i0) {
+    throw new Error("模型 content 找不到完整 JSON 區塊：" + content.slice(0, 200));
+  }
+
+  const jsonText = content.slice(i0, i1 + 1);
+
+  try {
+    return JSON.parse(jsonText);
+  } catch (e) {
+    throw new Error("模型 content 不是有效 JSON：" + jsonText.slice(0, 200));
+  }
+}
 
   const res = await fetch(url, {
     method: "POST",

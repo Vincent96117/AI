@@ -131,7 +131,7 @@ const CONFIG = {
   TOP5_LIMIT: 5,
   AI_INTERVAL_MS: 2 * 60 * 1000,
   AI_INPUT_SIZE: 10,
-  MIN_AI_POOL: 8, // ✅ 放寬，確保能跑（不一定要滿10）
+  MIN_AI_POOL: 8,
 
   // ✅ 熱機 5min + 至少1個完整bucket（5m）
   WARMUP_MIN_MS: 5 * 60 * 1000,
@@ -156,7 +156,6 @@ const CONFIG = {
     range20PctMax: 3.2
   },
 
-  // ✅ 放寬門檻，避免 Top10 永遠湊不滿
   THRESH: {
     volZMin: 0.5,
     deltaNotionalMin: 5000,
@@ -169,7 +168,6 @@ const CONFIG = {
     replaceMargin: 2,
   },
 
-  // TP floor（先保留你原本R-based保底，避免AI亂給）
   TP_K: [1.3, 2.6, 4.0],
 
   TOPCAP_EXCLUDE: [
@@ -186,7 +184,15 @@ const CONFIG = {
 
   EXCLUDE_EXTRA: [
     "USDCUSDT","TUSDUSDT","FDUSDUSDT","USDPUSDT","DAIUSDT"
-  ]
+  ],
+
+  // ✅ 關鍵補丁：預抓 Universe 的 klines/OI（解掉 Top10=0 死鎖）
+  PREFETCH: {
+    N: 30,           // 先抓 Universe 前 N 個
+    BATCH: 6,        // 分批避免限流
+    SLEEP_MS: 180,   // 每批間隔
+    RUN_AFTER_UNIVERSE_REFRESH: true
+  }
 };
 
 /* ===========================
@@ -346,6 +352,18 @@ function togglePin(sym) {
 /* ===========================
    DELETE/HIDE + auto replace
 =========================== */
+function signatureOfTop10(summaries) {
+  return summaries.map(s => [
+    s.symbol,
+    Math.round((s.price||0)*1e6),
+    Math.round((s.ret5m_pct||0)*1000),
+    Math.round((s.active_buy_delta_5m_notional||0)),
+    Math.round((s.vol5m_notional||0)),
+    Math.round((s.oi_delta_5m||0)),
+    s.stage
+  ].join(":")).join("|");
+}
+
 function backfillTop5Placeholder() {
   const exist = new Set(aiTop5.map(x => x.symbol));
   const pool = candidatesTopN
@@ -424,17 +442,6 @@ function meanStd(arr) {
   const v = arr.reduce((a,b)=>a+(b-mean)*(b-mean),0) / arr.length;
   const std = Math.sqrt(v);
   return { mean, std };
-}
-function signatureOfTop10(summaries) {
-  return summaries.map(s => [
-    s.symbol,
-    Math.round((s.price||0)*1e6),
-    Math.round((s.ret5m_pct||0)*1000),
-    Math.round((s.active_buy_delta_5m_notional||0)),
-    Math.round((s.vol5m_notional||0)),
-    Math.round((s.oi_delta_5m||0)),
-    s.stage
-  ].join(":")).join("|");
 }
 
 /* ===========================
@@ -528,6 +535,11 @@ async function refreshUniverse() {
   for (const sym of universe) {
     if (!wsAgg[sym]) initAggTrade(sym);
     if (!symState[sym]) initSymbolState(sym);
+  }
+
+  // ✅ 關鍵：刷新 universe 後立刻預抓 klines/OI → 解掉 Top10=0 死鎖
+  if (CONFIG.PREFETCH.RUN_AFTER_UNIVERSE_REFRESH) {
+    prefetchUniverseKlinesOI(CONFIG.PREFETCH.N).catch(()=>{});
   }
 }
 
@@ -745,7 +757,6 @@ async function ensureKlinesAndOI(sym) {
   const s = symState[sym];
   if (!s) return;
 
-  // BTC 每分鐘更新一次
   if (!btcState.ready || (Date.now() - (btcState.ts||0) > 60*1000)) {
     await ensureBTC();
   }
@@ -766,6 +777,27 @@ async function ensureKlinesAndOI(sym) {
       computeOIDeltas(sym);
     }
   } catch {}
+}
+
+/* ===========================
+   ✅ 關鍵補丁：Universe 預抓 klines/OI（解 Top10=0 死鎖）
+=========================== */
+let PREFETCH_LOCK = false;
+async function prefetchUniverseKlinesOI(N = 30) {
+  if (PREFETCH_LOCK) return;
+  PREFETCH_LOCK = true;
+
+  try {
+    const syms = (universe || []).slice(0, N);
+    const BATCH = CONFIG.PREFETCH.BATCH;
+    for (let i = 0; i < syms.length; i += BATCH) {
+      const batch = syms.slice(i, i + BATCH);
+      await Promise.all(batch.map(sym => ensureKlinesAndOI(sym)));
+      await new Promise(r => setTimeout(r, CONFIG.PREFETCH.SLEEP_MS));
+    }
+  } finally {
+    PREFETCH_LOCK = false;
+  }
 }
 
 function computeKlineFeatures(sym, k) {
@@ -811,10 +843,8 @@ function computeKlineFeatures(sym, k) {
     s.distSma20Atr = Math.abs(lastClose - s.sma20) / s.atr14;
   }
 
-  // 距離前高百分比（越小越像突破前夕）
   if (s.swingHigh20 && lastClose) s.distToSwingHighPct = ((s.swingHigh20 - lastClose) / lastClose) * 100;
 
-  // 壓縮 proxy：range% / ATR%
   const atrPct = (s.atr14 && lastClose) ? (s.atr14 / lastClose * 100) : null;
   s.compressionProxy = (s.range20Pct != null && atrPct != null && atrPct > 0) ? (s.range20Pct / atrPct) : null;
 
@@ -938,9 +968,7 @@ function startLiquidationFeed() {
   const ws = new WebSocket("wss://fstream.binance.com/ws/!forceOrder@arr");
   wsLiq = ws;
 
-  ws.onopen = () => {
-    setStatus("liqStatus", "WS OK", "ok");
-  };
+  ws.onopen = () => setStatus("liqStatus", "WS OK", "ok");
   ws.onerror = () => setStatus("liqStatus", "WS error", "warn");
   ws.onclose = () => {
     setStatus("liqStatus", "WS closed", "warn");
@@ -958,7 +986,7 @@ function startLiquidationFeed() {
       const sym = (o?.s || "").toUpperCase();
       if (!sym || !symState[sym]) continue;
 
-      const side = o?.S; // BUY/SELL
+      const side = o?.S;
       const p = parseFloat(o?.p || "0");
       const q = parseFloat(o?.q || "0");
       const notional = p*q;
@@ -1030,7 +1058,6 @@ function deriveSymbol(sym) {
   if (s.compressionProxy !== null && s.compressionProxy < 2.2) tags.push("壓縮型態(可能蹲→噴)");
   if (antiChase) tags.push("已急拉/追價風險");
 
-  // liquidation tags
   const L = liq[sym];
   if (L?.count5m) {
     if (L.buyNotional5m > (L.sellNotional5m||0)*1.5 && (s.ret5mPct ?? 0) >= 0) tags.push("清算偏BUY(疑似嘎空)");
@@ -1077,7 +1104,6 @@ function deriveSymbol(sym) {
   if (s.compressionProxy !== null && s.compressionProxy < 2.2) score += 4;
   if (s.distToSwingHighPct !== null && s.distToSwingHighPct < 0.35) score += 3;
 
-  // BTC relative strength bonus (BTC跌你強)
   const rel5 = (btcState?.ready && s.ret5mPct!=null && btcState.ret5m!=null) ? (s.ret5mPct - btcState.ret5m) : null;
   if (rel5 != null) {
     if ((btcState.ret5m ?? 0) < 0 && rel5 > 0) score += 6;
@@ -1085,7 +1111,6 @@ function deriveSymbol(sym) {
     else if (rel5 < -0.5) score -= 3;
   }
 
-  // liquidation magnitude bonus (避免過大)
   if (L?.count5m) {
     const totalL = (L.buyNotional5m||0) + (L.sellNotional5m||0);
     score += clamp((Math.log10(1 + totalL) - 4) * 2, 0, 6);
@@ -1199,7 +1224,7 @@ function buildTrackedTopN() {
 }
 
 /* ===========================
-   Summary to AI (完整資料餵AI)
+   Summary to AI（完整資料餵AI）
 =========================== */
 function buildSummary(sym) {
   const s = symState[sym];
@@ -1209,16 +1234,12 @@ function buildSummary(sym) {
   const vp = s.vpToday;
   const L = liq[sym];
 
-  // BTC relative
   const rel5 = (btcState?.ready && s.ret5mPct!=null && btcState.ret5m!=null) ? (s.ret5mPct - btcState.ret5m) : null;
-  const rel15 = (btcState?.ready && btcState.ret15m!=null && s.ret5mPct!=null) ? null : null; // 保留欄位（未算15m）
-  // 如果你要真的15m相對，我可以下一版把sym的15m回報也算出來
 
   return {
     symbol: s.symbol,
     price: s.price,
 
-    // 即時動能 / orderflow
     ret5m_pct: s.ret5mPct,
     vol5m_notional: s.vol5mNotional,
     volZ_5m: vzEff,
@@ -1228,13 +1249,11 @@ function buildSummary(sym) {
 
     delta_notional_slope_15m: s.deltaSlope15m,
 
-    // 衍生品
     funding_pct: s.fundingPct,
     premium_pct: s.premiumPct,
     oi_delta_5m: s.oiDelta5m,
     oi_delta_4h: s.oiDelta4h,
 
-    // 結構（5m klines）
     atr14: s.atr14,
     swing_low_20: s.swingLow20,
     swing_high_20: s.swingHigh20,
@@ -1244,7 +1263,6 @@ function buildSummary(sym) {
     dist_to_swing_high_pct: s.distToSwingHighPct,
     compression_proxy: s.compressionProxy,
 
-    // 今日VP
     today_vp: vp ? {
       poc: vp.poc,
       val: vp.val,
@@ -1254,14 +1272,12 @@ function buildSummary(sym) {
       day_range_pct: vp.rangePct
     } : null,
 
-    // liquidation feed（5m窗）
     liquidation_5m: L ? {
       count: L.count5m || 0,
       buy_notional: L.buyNotional5m || 0,
       sell_notional: L.sellNotional5m || 0
     } : null,
 
-    // BTC 對比
     btc: btcState?.ready ? {
       price: btcState.price,
       ret5m_pct: btcState.ret5m,
@@ -1270,7 +1286,6 @@ function buildSummary(sym) {
     } : null,
     rel_to_btc_5m_pct: rel5,
 
-    // 前端判斷
     stage: s.stage,
     preScore: s.preScore,
     tags: s.tags,
@@ -1281,7 +1296,7 @@ function buildSummary(sym) {
 }
 
 /* ===========================
-   ✅ Precise TP algorithm (保留：避免AI亂給)
+   TP (保底避免AI亂給)
 =========================== */
 function uniqNums(arr) {
   const out = [];
@@ -1352,9 +1367,7 @@ function computePreciseTPs(summary, entry, stop) {
 =========================== */
 async function groqChatCompletion({ apiKey, model, messages, maxOut = 450 }) {
   const url = "https://api.groq.com/openai/v1/chat/completions";
-
-  // A) 先用 JSON mode 試一次（如果模型支援，這是最乾淨）
-  const payloadJsonMode = {
+  const payload = {
     model,
     messages,
     temperature: 0.12,
@@ -1363,66 +1376,42 @@ async function groqChatCompletion({ apiKey, model, messages, maxOut = 450 }) {
     response_format: { type: "json_object" }
   };
 
-  // B) fallback：不用 response_format，靠前端擷取 {...} 再 JSON.parse
-  const payloadTextMode = {
-    model,
-    messages,
-    temperature: 0.12,
-    top_p: 0.9,
-    max_completion_tokens: maxOut
-  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type":"application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify(payload)
+  });
 
-  async function call(payload) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(payload)
-    });
+  const raw = await res.text();
+  console.log("[Groq] HTTP", res.status, raw);
 
-    const raw = await res.text();
-    console.log("[Groq] HTTP", res.status, raw);
+  if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw.slice(0,200)}`);
 
-    if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw}`);
-    const data = JSON.parse(raw);
-    const content = data?.choices?.[0]?.message?.content ?? "";
-    return content;
-  }
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error("Groq 回應不是 JSON"); }
 
-  // 先試 JSON mode
-  try {
-    const content = await call(payloadJsonMode);
-    // JSON mode 理論上就直接是 JSON
-    return JSON.parse(content);
-  } catch (e) {
-    const msg = String(e?.message || e);
-    // 只要遇到 json_validate_failed，就自動降級
-    if (!msg.includes("json_validate_failed")) throw e;
+  const content = data?.choices?.[0]?.message?.content ?? "";
+  const cleaned = (content || "")
+    .replace(/^```json\s*/i,"")
+    .replace(/^```\s*/i,"")
+    .replace(/```$/i,"")
+    .trim();
 
-    console.warn("Groq JSON mode failed, fallback to text mode");
+  const i0 = cleaned.indexOf("{");
+  const i1 = cleaned.lastIndexOf("}");
+  if (i0 < 0 || i1 <= i0) throw new Error("模型 content 找不到完整 JSON");
 
-    const content = await call(payloadTextMode);
+  const jsonStr = cleaned.slice(i0, i1 + 1);
 
-    // 你的原本擷取 {...} 的邏輯
-    const cleaned = String(content || "")
-      .replace(/^```json\s*/i,"")
-      .replace(/^```\s*/i,"")
-      .replace(/```$/i,"")
-      .trim();
+  let obj;
+  try { obj = JSON.parse(jsonStr); }
+  catch { throw new Error("模型 content 不是有效 JSON: " + jsonStr.slice(0,200)); }
 
-    const i0 = cleaned.indexOf("{");
-    const i1 = cleaned.lastIndexOf("}");
-    if (i0 < 0 || i1 <= i0) throw new Error("模型 content 找不到完整 JSON");
-
-    const jsonStr = cleaned.slice(i0, i1 + 1);
-    return JSON.parse(jsonStr);
-  }
+  return obj;
 }
 
 /* ===========================
-   AI prompts（明確寫出：蹲5-20分鐘、BTC相對強、liq、delta slope）
+   AI prompts
 =========================== */
 function buildAiPrompt(top10Summaries) {
   const system = `
@@ -1577,7 +1566,7 @@ function normalizeAiPick(sym, summary, pick) {
 }
 
 /* ===========================
-   Batch AI + Single AI（已修：防打架、去重、冷卻）
+   Batch AI + Single AI（防打架、去重、冷卻）
 =========================== */
 async function runAIOnce(force=false) {
   if (AI_INFLIGHT) return;
@@ -1677,7 +1666,6 @@ async function runAIOnce(force=false) {
     const msg = String(e?.message || e);
     console.error(e);
 
-    // ✅ 任何失敗都冷卻，避免 1.5s 觸發狂打
     aiBackoffUntil = Date.now() + 45*1000;
 
     if (msg.includes("429")) {
@@ -1753,10 +1741,10 @@ async function testAI() {
       apiKey: key,
       model,
       maxOut: 160,
-     messages: [
-  { role:"system", content:'Return EXACTLY one JSON object. No markdown. No text. Must be valid JSON.' },
-  { role:"user", content:'{"ok":true}' }
-]
+      messages: [
+        { role:"system", content:"只輸出 JSON 物件，不要任何多餘文字。" },
+        { role:"user", content: JSON.stringify({ ping:"pong", now: Date.now() }) }
+      ]
     });
     console.log("Test AI OK:", obj);
     setStatus("aiStatus", `Test OK (${model})`, "ok");
@@ -2031,6 +2019,9 @@ async function boot() {
   await ensureBTC().catch(()=>{});
   await refreshUniverse().catch(e => console.error(e));
 
+  // ✅ 首次啟動也先預抓一次（保險）
+  await prefetchUniverseKlinesOI(CONFIG.PREFETCH.N).catch(()=>{});
+
   setInterval(() => refreshPremiumAll().catch(()=>{}), 60*1000);
   setInterval(() => refreshUniverse().catch(()=>{}), CONFIG.UNIVERSE_REFRESH_MS);
   setInterval(() => ensureBTC().catch(()=>{}), 60*1000);
@@ -2041,6 +2032,7 @@ async function boot() {
   }, CONFIG.CANDIDATE_REFRESH_MS);
 
   setInterval(() => {
+    // ✅ 候選池為主，降低 API 壓力
     for (const sym of candidatesTopN) ensureKlinesAndOI(sym);
   }, 60*1000);
 
@@ -2048,10 +2040,10 @@ async function boot() {
     for (const sym of candidatesTopN) refreshTodayVP(sym);
   }, CONFIG.VP_REFRESH_MS);
 
-  // ✅ 保留你原本 1.5s，但已防打架/去重/冷卻 → 不會再狂刷
+  // ✅ 仍然 1.5s tick，但已經：inflight + 去重sig + backoff，不會狂刷
   setInterval(() => runAIOnce(false), 1500);
 
-  // ✅ 熱機5分鐘，這裡先不要太早打AI；先給你 90 秒讓資料起來
+  // ✅ 熱機 5 分鐘：先給資料起來，再強制跑一次
   setTimeout(() => runAIOnce(true), 90*1000);
 }
 

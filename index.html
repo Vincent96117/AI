@@ -1155,26 +1155,42 @@ function buildTrackedTopN() {
 
   const ex = new Set([...CONFIG.TOPCAP_EXCLUDE, ...CONFIG.EXCLUDE_EXTRA]);
 
-  const arr = universe
+  // 1) 先形成「預候選池」：只要有 trade / warmup / bucket 就先進來
+  const prePool = universe
     .filter(sym => !hiddenSet.has(sym))
     .filter(sym => !ex.has(sym))
     .filter(sym => !isFxCommodity(sym))
     .map(sym => symState[sym])
     .filter(s => s && s.price !== null)
     .filter(s => (Date.now() - s.firstSeenTs) >= CONFIG.WARMUP_MIN_MS)
-    .filter(s => (s.histBuckets ?? 0) >= CONFIG.MIN_HIST_BUCKETS) // ✅ now 0
+    .filter(s => (s.histBuckets ?? 0) >= CONFIG.MIN_HIST_BUCKETS)
+    .sort((a,b) => (b.preScore ?? 0) - (a.preScore ?? 0))
+    .slice(0, 25); // ✅ 先抓前25個去補 klinesReady
+
+  // 2) ✅ 關鍵修正：Top10 之前就先抓 klines/OI/VP，解除雞生蛋
+  for (const s of prePool) {
+    ensureKlinesAndOI(s.symbol);
+    refreshTodayVP(s.symbol);
+  }
+
+  // 3) 真正候選：這時候 klinesReady 會逐步變 true
+  const arr = prePool
     .filter(s => s.klinesReady === true)
     .filter(s => {
       const T = CONFIG.THRESH;
-      const longBias = (s.delta5mNotional !== null && s.delta5mNotional > 0) &&
-                       (s.imbalance5m !== null && s.imbalance5m >= (0.5 + T.imbalanceMin));
+
+      // long bias
+      const longBias =
+        (s.delta5mNotional !== null && s.delta5mNotional > 0) &&
+        (s.imbalance5m !== null && s.imbalance5m >= (0.5 + T.imbalanceMin));
+
       if (!longBias) return false;
       if (s.preScore < T.preScoreMin) return false;
       if (s.stage === "冷卻") return false;
       return true;
     })
     .sort((a,b) => b.preScore - a.preScore)
-    .slice(0, 60);
+    .slice(0, 40);
 
   if (CONFIG.TRACKING?.enabled) updateTrackedTopN(arr);
 
@@ -1182,11 +1198,6 @@ function buildTrackedTopN() {
   $("candN").textContent = candidatesTopN.length;
   updatePinBadge();
   updateHiddenBadge();
-
-  for (const sym of candidatesTopN) {
-    ensureKlinesAndOI(sym);
-    refreshTodayVP(sym);
-  }
 
   const summaries = candidatesTopN.map(sym => buildSummary(sym)).filter(Boolean);
   $("debugJSON").textContent = JSON.stringify({ top10: summaries }, null, 2);

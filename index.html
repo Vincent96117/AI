@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TRIDENT V7.6 - 5K Swing Mode (BTC RS + Fast Warmup)</title>
+  <title>TRIDENT V7.6 - 5K Swing Mode (BTC RS + LIQ + Robust JSON)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
@@ -49,7 +49,7 @@
       <div>
         <div class="text-white font-black italic text-xl leading-none">TRIDENT <span class="text-emerald-400">V7.6</span></div>
         <div class="tiny muted font-bold tracking-widest uppercase">
-          LONG ONLY / 5K小波段模式 / 熱機5–10min / ✅BTC相對強弱加分 ✅釘選 ✅搜尋上榜 ✅單幣AI更新 ✅🗑不看替補
+          LONG ONLY / 5K小波段 / 熱機~8min / ✅BTC相對強弱加分 ✅LIQ強平訊號 ✅穩健JSON解析
         </div>
       </div>
     </div>
@@ -60,8 +60,6 @@
       <button class="btn" onclick="clearKey()">Clear</button>
 
       <select id="modelSel" class="btn">
-        <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
-        <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
         <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
         <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
       </select>
@@ -88,11 +86,12 @@
       <span class="badge px-2 py-1 rounded-lg">Binance: <b id="binStatus" class="muted">-</b></span>
       <span class="badge px-2 py-1 rounded-lg">AI: <b id="aiStatus" class="muted">-</b></span>
       <span class="badge px-2 py-1 rounded-lg">VP(Today): <b id="vpStatus" class="muted">-</b></span>
-      <span class="badge px-2 py-1 rounded-lg">BTC(5m): <b id="btc5m" class="muted">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">LIQ: <b id="liqStatus" class="muted">-</b></span>
+      <span class="badge px-2 py-1 rounded-lg">BTC(5m): <b id="btcStatus" class="muted">-</b></span>
     </div>
 
     <div class="tiny muted">
-      5K小波段：候選需「熱機>=5min + 至少1個5m bucket」即可進 Top10 / 送AI（更快、但仍有門檻）。
+      Top10 先用「成交/買盤/量能」進池，K線/VP/OI 背景補齊，避免 klinesReady 卡死。
     </div>
   </div>
 
@@ -113,7 +112,7 @@
 
 <script>
 /* ===========================
-   CONFIG (V7.6 5K Swing Mode)
+   CONFIG (V7.6)
 =========================== */
 const CONFIG = {
   LONG_ONLY: true,
@@ -127,25 +126,41 @@ const CONFIG = {
   TOP5_LIMIT: 5,
   AI_INTERVAL_MS: 2 * 60 * 1000,
   AI_INPUT_SIZE: 10,
-  MIN_AI_POOL: 10,
+  MIN_AI_POOL: 8, // ✅ 不必死等10個：市場冷時也能跑（但仍偏向滿10）
 
-  // ✅ Fast warmup: 5–10 分鐘內可上榜（但仍需跨到至少1個歷史bucket）
-  WARMUP_MIN_MS: 5 * 60 * 1000,
-  MIN_HIST_BUCKETS: 1,
+  // ✅ 熱機：目標 5–10 分鐘內可進候選（預設 8m）
+  WARMUP_MIN_MS: 8 * 60 * 1000,
+  MIN_HIST_BUCKETS: 2, // 2個5m bucket=10分鐘基本穩定；你要更嚴可改回3
 
   ROLL_5M_MS: 5 * 60 * 1000,
   BUCKET_5M_MS: 5 * 60 * 1000,
   HIST_5M_BUCKETS: 48,
 
-  // ✅ 5K：改用 5m klines 做 ATR/swing/SMA
   KLINES_INTERVAL: "5m",
-  KLINES_LIMIT: 240, // 20小時
+  KLINES_LIMIT: 240,
   ATR_PERIOD: 14,
-  SWING_WINDOW: 24,  // 2小時
+  SWING_WINDOW: 24,
 
   VP_5M_LIMIT: 288,
   VP_REFRESH_MS: 2 * 60 * 1000,
   VP_BINS: 24,
+
+  // ✅ liquidation feed（強平）
+  LIQ: {
+    enabled: true,
+    ROLL_MS: 5 * 60 * 1000,
+    MIN_NOTIONAL_TAG: 50000
+  },
+
+  // ✅ BTC 相對強弱
+  BTC: {
+    enabled: true,
+    symbol: "BTCUSDT",
+    ROLL_MS: 5 * 60 * 1000,
+    RS_GAIN_MULT: 6.0,     // 相對 BTC 強多少就加多少（縮放）
+    RS_MAX_BONUS: 10,      // 最多加10分
+    RS_MIN_BONUS_PCT: 0.15 // 只有相對優勢超過0.15%才開始加
+  },
 
   ANTI_CHASE: {
     ret5mPctMax: 1.2,
@@ -157,7 +172,7 @@ const CONFIG = {
     volZMin: 0.9,
     deltaNotionalMin: 8000,
     imbalanceMin: 0.02,
-    preScoreMin: 48
+    preScoreMin: 46 // 稍微放寬，讓 Top10 更容易成形
   },
 
   TRACKING: {
@@ -185,15 +200,6 @@ const CONFIG = {
 };
 
 /* ===========================
-   BTC baseline (always-on)
-=========================== */
-const BTC_SYM = "BTCUSDT";
-function ensureBTC() {
-  if (!symState[BTC_SYM]) initSymbolState(BTC_SYM);
-  if (!wsAgg[BTC_SYM]) initAggTrade(BTC_SYM);
-}
-
-/* ===========================
    STATE
 =========================== */
 let AUTO_AI = true;
@@ -206,6 +212,7 @@ let allowedPerpSet = null;
 let symState = {};
 let wsAgg = {};
 let wsMini = null;
+let wsLiq = null;
 
 let premiumMap = {};
 
@@ -224,6 +231,15 @@ function saveHiddenSet(){ localStorage.setItem("HIDDEN_SET", JSON.stringify(Arra
 
 let pinnedTop1 = { symbol:null, score:-1, confidence:-1, ts:0 };
 
+// BTC baseline
+let btcState = {
+  symbol: CONFIG.BTC.symbol,
+  price: null,
+  trades: [],
+  ret5mPct: null,
+  lastTradeTs: 0
+};
+
 /* ===========================
    UI helpers
 =========================== */
@@ -239,6 +255,7 @@ function fmt(n, digits=2) {
 function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
 function setStatus(el, text, cls) {
   const node = $(el);
+  if (!node) return;
   node.textContent = text;
   node.className = cls || "muted";
 }
@@ -268,7 +285,9 @@ function updateHiddenBadge() { $("hidN").textContent = String(hiddenSet.size); }
 
 function hardReset() {
   try { if (wsMini) wsMini.close(); } catch {}
+  try { if (wsLiq) wsLiq.close(); } catch {}
   Object.keys(wsAgg).forEach(s => { try { wsAgg[s].close(); } catch {} });
+
   wsAgg = {};
   symState = {};
   universe = [];
@@ -284,17 +303,20 @@ function hardReset() {
   lastAiTs = 0;
   aiBackoffUntil = 0;
 
+  btcState = { symbol: CONFIG.BTC.symbol, price:null, trades:[], ret5mPct:null, lastTradeTs:0 };
+
   $("cards").innerHTML = "";
   $("debugJSON").textContent = "";
   setStatus("binStatus","重置中…","warn");
   setStatus("aiStatus","-","muted");
   setStatus("vpStatus","-","muted");
+  setStatus("liqStatus","-","muted");
+  setStatus("btcStatus","-","muted");
   $("universeN").textContent = "-";
   $("candN").textContent = "-";
   $("pinN").textContent = "0";
   $("top5N").textContent = "-";
   $("pinnedSym").textContent = "-";
-  $("btc5m").textContent = "-";
   updateHiddenBadge();
   boot();
 }
@@ -483,7 +505,7 @@ async function refreshUniverse() {
   updatePinBadge();
 
   Object.keys(wsAgg).forEach(sym => {
-    if (!uSet.has(sym) && sym !== BTC_SYM) { // BTC 例外：永遠保留
+    if (!uSet.has(sym)) {
       try { wsAgg[sym].close(); } catch {}
       delete wsAgg[sym];
       delete symState[sym];
@@ -541,6 +563,15 @@ function initSymbolState(sym) {
     vpToday: null,
     vpLastTs: 0,
 
+    // liquidation
+    liqTrades: [],
+    liq5mNotional: null,
+    liq5mDelta: null,
+    liqZcs: null,
+
+    // BTC 相對強弱（symbol - BTC）
+    rsVsBtc5m: null,
+
     stage: "熱機中",
     tags: [],
     preScore: 0,
@@ -560,7 +591,7 @@ function initAggTrade(sym) {
   };
   ws.onerror = () => setStatus("binStatus","WS error","warn");
   ws.onclose = () => {
-    if ((universe.includes(sym) || sym === BTC_SYM) && !hiddenSet.has(sym)) {
+    if (universe.includes(sym) && !hiddenSet.has(sym)) {
       setTimeout(() => {
         if (!wsAgg[sym] || wsAgg[sym].readyState === 3) initAggTrade(sym);
       }, 800 + Math.random()*800);
@@ -636,13 +667,49 @@ function initAggTrade(sym) {
       s.premiumPct = p.premiumPct;
     }
 
-    deriveSymbol(sym);
-
-    // BTC badge
-    if (sym === BTC_SYM) {
-      $("btc5m").textContent = `${fmt(s.ret5mPct,2)}%`;
-      $("btc5m").className = (s.ret5mPct ?? 0) >= 0 ? "ok" : "bad";
+    // BTC 相對強弱：ret(sym)-ret(btc)
+    if (CONFIG.BTC.enabled && btcState.ret5mPct !== null && s.ret5mPct !== null) {
+      s.rsVsBtc5m = s.ret5mPct - btcState.ret5mPct;
     }
+
+    deriveSymbol(sym);
+  };
+}
+
+/* ===========================
+   BTC baseline aggTrade
+=========================== */
+function startBtcFeed() {
+  if (!CONFIG.BTC.enabled) return;
+
+  const sym = CONFIG.BTC.symbol;
+  const url = `wss://fstream.binance.com/ws/${sym.toLowerCase()}@aggTrade`;
+  const ws = new WebSocket(url);
+
+  ws.onopen = () => setStatus("btcStatus","WS OK","ok");
+  ws.onerror = () => setStatus("btcStatus","WS error","warn");
+  ws.onclose = () => {
+    setStatus("btcStatus","WS closed","warn");
+    setTimeout(startBtcFeed, 1200);
+  };
+
+  ws.onmessage = (ev) => {
+    const d = JSON.parse(ev.data);
+    const ts = d.T;
+    const price = parseFloat(d.p);
+
+    btcState.price = price;
+    btcState.lastTradeTs = ts;
+
+    btcState.trades.push({ ts, price });
+    const cutoff = Date.now() - CONFIG.BTC.ROLL_MS;
+    while (btcState.trades.length && btcState.trades[0].ts < cutoff) btcState.trades.shift();
+
+    if (btcState.trades.length >= 2) {
+      const old = btcState.trades[0].price;
+      if (old > 0) btcState.ret5mPct = (price / old - 1) * 100;
+    }
+    setStatus("btcStatus", `BTC ${fmt(btcState.ret5mPct,2)}%`, (btcState.ret5mPct||0)>=0 ? "ok":"bad");
   };
 }
 
@@ -835,7 +902,7 @@ async function refreshTodayVP(sym) {
       poc, val, vah, topNodes,
       priceVsPocPct,
       bins,
-      totalQuoteVolume: total,
+      totalNotional: total,
       rangePct: (cur>0)?((pMax-pMin)/cur*100):null
     };
     s.vpLastTs = now;
@@ -847,7 +914,76 @@ async function refreshTodayVP(sym) {
 }
 
 /* ===========================
-   Derive: stage / tags / preScore (+ BTC RS)
+   Liquidation feed (!forceOrder@arr)
+=========================== */
+function startLiquidationFeed() {
+  if (!CONFIG.LIQ?.enabled) return;
+
+  const ws = new WebSocket("wss://fstream.binance.com/ws/!forceOrder@arr");
+  wsLiq = ws;
+
+  ws.onopen = () => setStatus("liqStatus","WS OK","ok");
+  ws.onerror = () => setStatus("liqStatus","WS error","warn");
+  ws.onclose = () => {
+    setStatus("liqStatus","WS closed","warn");
+    setTimeout(startLiquidationFeed, 1200);
+  };
+
+  ws.onmessage = (ev) => {
+    let arr;
+    try { arr = JSON.parse(ev.data); } catch { return; }
+    if (!Array.isArray(arr)) return;
+
+    const now = Date.now();
+    for (const it of arr) {
+      const o = it?.o;
+      const sym = o?.s;
+      if (!sym || !symState[sym]) continue;
+      if (hiddenSet.has(sym)) continue;
+
+      const s = symState[sym];
+      const ts = Number(o?.T || it?.E || now);
+      const px = parseFloat(o?.ap || o?.p || "0");
+      const qty = parseFloat(o?.q || "0");
+      if (!isFinite(px) || !isFinite(qty) || px <= 0 || qty <= 0) continue;
+
+      const notional = px * qty;
+
+      // BUY = 空單強平(爆空) → 正向推升
+      // SELL = 多單強平(多殺多) → 負向砸盤
+      const side = (o?.S === "BUY") ? "SHORT_LIQ" : "LONG_LIQ";
+      const delta = (side === "SHORT_LIQ") ? notional : -notional;
+
+      s.liqTrades.push({ ts, notional, side, delta });
+
+      const cutoff = now - CONFIG.LIQ.ROLL_MS;
+      while (s.liqTrades.length && s.liqTrades[0].ts < cutoff) s.liqTrades.shift();
+
+      let sumN = 0, sumD = 0;
+      for (const x of s.liqTrades) { sumN += x.notional; sumD += x.delta; }
+
+      s.liq5mNotional = sumN;
+      s.liq5mDelta = sumD;
+    }
+
+    computeCrossSectionLiqZ();
+  };
+}
+
+function computeCrossSectionLiqZ() {
+  const list = universe.map(sym => symState[sym]).filter(s => s && isFinite(s.liq5mNotional));
+  if (list.length < 10) return;
+
+  const vals = list.map(s => s.liq5mNotional);
+  const ms = meanStd(vals);
+
+  for (const s of list) {
+    s.liqZcs = (ms.std > 0) ? (s.liq5mNotional - ms.mean) / ms.std : 0;
+  }
+}
+
+/* ===========================
+   Derive: stage / tags / preScore
 =========================== */
 function deriveSymbol(sym) {
   const s = symState[sym];
@@ -876,6 +1012,21 @@ function deriveSymbol(sym) {
   if (s.swingHigh20 && s.price && (s.swingHigh20 - s.price)/s.price*100 < 0.25) tags.push("接近突破位");
   if (antiChase) tags.push("已急拉/追價風險");
 
+  // ✅ liquidation tags
+  if (s.liq5mNotional !== null && s.liq5mNotional >= CONFIG.LIQ.MIN_NOTIONAL_TAG) {
+    if (s.liq5mDelta !== null && s.liq5mDelta > 0) tags.push("爆空推升(短強平)");
+    if (s.liq5mDelta !== null && s.liq5mDelta < 0) tags.push("多單被打爆(長強平)");
+  }
+  if (s.liqZcs !== null && s.liqZcs >= 2.0) tags.push("強平異常");
+
+  // ✅ BTC 相對強弱 tag
+  if (CONFIG.BTC.enabled && s.rsVsBtc5m !== null) {
+    if (s.rsVsBtc5m >= 0.35) tags.push("抗跌/逆勢強(BTC)");
+    else if (s.rsVsBtc5m <= -0.35) tags.push("弱於BTC");
+  }
+
+  s.tags = tags;
+
   const flowOK =
     (s.delta5mNotional !== null && s.delta5mNotional > T.deltaNotionalMin) &&
     (s.imbalance5m !== null && s.imbalance5m >= (0.5 + T.imbalanceMin));
@@ -884,7 +1035,7 @@ function deriveSymbol(sym) {
   const notDump = (s.ret5mPct === null) ? true : (s.ret5mPct > -1.0);
 
   const setup = volOK && flowOK && notDump && !antiChase;
-  const ignite = setup && (s.price !== null && s.sma20 !== null && s.price > s.sma20);
+  const ignite = setup && (s.price !== null && s.sma20 !== null ? (s.price > s.sma20) : true); // sma20 沒補齊前不擋
   const confirm = ignite && (s.swingHigh20 !== null && s.price !== null && s.price >= s.swingHigh20);
 
   if (antiChase) s.stage = "追價風險";
@@ -910,31 +1061,28 @@ function deriveSymbol(sym) {
   if (s.fundingPct !== null && s.fundingPct < 0) score += 3;
   if (s.premiumPct !== null && Math.abs(s.premiumPct) > 0.25) score -= 2;
 
-  if (antiChase) score -= 18;
-  if (s.ret5mPct !== null && s.ret5mPct < -0.6) score -= 6;
+  // ✅ liquidation scoring：爆空推升加分、多殺多扣分
+  if (s.liqZcs !== null) score += clamp(s.liqZcs * 4, -10, 10);
+  if (s.liq5mDelta !== null) score += clamp(s.liq5mDelta / 120000, -12, 12);
 
-  // ✅ BTC 相對強弱加分：BTC 跌時，逆勢/抗跌加分
-  const btc = symState[BTC_SYM];
-  const btcRet = btc?.ret5mPct;
-  if (sym !== BTC_SYM && btcRet !== null && btcRet !== undefined && s.ret5mPct !== null && s.ret5mPct !== undefined) {
-    const rs = s.ret5mPct - btcRet; // 相對BTC (5m)
+  // ✅ BTC 相對強弱加分：BTC跌時更有用
+  if (CONFIG.BTC.enabled && btcState.ret5mPct !== null && s.rsVsBtc5m !== null) {
+    const rs = s.rsVsBtc5m;
+    const btcDown = (btcState.ret5mPct < 0);
+    const thresh = CONFIG.BTC.RS_MIN_BONUS_PCT;
 
-    // 一般：相對強就加、弱就減（限制幅度）
-    score += clamp(rs * 4, -8, 8);
-
-    // BTC 明顯下跌時，該幣能撐住甚至上漲 -> 額外加分
-    if (btcRet <= -0.4) {
-      if (s.ret5mPct >= 0) {
-        score += 6;
-        tags.push("BTC跌我逆勢");
-      } else if (rs > 0.2) {
-        score += 3;
-        tags.push("抗跌(相對BTC)");
-      }
+    if (rs > thresh) {
+      const scale = btcDown ? 1.35 : 1.0; // BTC在跌：抗跌加分更重
+      const bonus = clamp((rs * CONFIG.BTC.RS_GAIN_MULT) * scale, 0, CONFIG.BTC.RS_MAX_BONUS);
+      score += bonus;
+    } else if (rs < -0.6) {
+      score -= 4; // 明顯弱於 BTC 小扣
     }
   }
 
-  s.tags = tags;
+  if (antiChase) score -= 18;
+  if (s.ret5mPct !== null && s.ret5mPct < -0.6) score -= 6;
+
   s.preScore = clamp(score, 0, 100);
 }
 
@@ -995,24 +1143,23 @@ function updateTrackedTopN(eligibleStates) {
 }
 
 /* ===========================
-   Candidate selection (fast warmup + fallback relax)
+   Candidate selection (FIXED: remove klinesReady gate)
 =========================== */
 function buildTrackedTopN() {
   computeCrossSectionZ();
 
   const ex = new Set([...CONFIG.TOPCAP_EXCLUDE, ...CONFIG.EXCLUDE_EXTRA]);
 
-  const base = universe
+  const arr = universe
     .filter(sym => !hiddenSet.has(sym))
     .filter(sym => !ex.has(sym))
     .filter(sym => !isFxCommodity(sym))
     .map(sym => symState[sym])
     .filter(s => s && s.price !== null)
+    // ✅ 熱機門檻：8min + 至少2個bucket
     .filter(s => (Date.now() - s.firstSeenTs) >= CONFIG.WARMUP_MIN_MS)
-    .filter(s => (s.histBuckets ?? 0) >= CONFIG.MIN_HIST_BUCKETS);
-
-  // Pass A：原本嚴格條件（但不再要求 klinesReady）
-  const strict = base
+    .filter(s => (s.histBuckets ?? 0) >= CONFIG.MIN_HIST_BUCKETS)
+    // ✅ 不再卡死：klinesReady 不當硬門檻（背景補齊即可）
     .filter(s => {
       const T = CONFIG.THRESH;
       const longBias = (s.delta5mNotional !== null && s.delta5mNotional > 0) &&
@@ -1025,24 +1172,6 @@ function buildTrackedTopN() {
     .sort((a,b) => b.preScore - a.preScore)
     .slice(0, 40);
 
-  // Pass B：如果湊不滿，放寬一點（仍保留 longBias）
-  const relaxed = base
-    .filter(s => {
-      const T = CONFIG.THRESH;
-      const longBias = (s.delta5mNotional !== null && s.delta5mNotional > 0) &&
-                       (s.imbalance5m !== null && s.imbalance5m >= (0.5 + T.imbalanceMin));
-      if (!longBias) return false;
-      if (s.preScore < (T.preScoreMin - 12)) return false; // 放寬
-      return true;
-    })
-    .sort((a,b) => b.preScore - a.preScore)
-    .slice(0, 40);
-
-  const arr = strict.length >= 12 ? strict : relaxed;
-
-  // ✅ 先把 top40 都補齊 klines/OI（避免特徵一直是空）
-  for (const x of arr) ensureKlinesAndOI(x.symbol);
-
   if (CONFIG.TRACKING?.enabled) updateTrackedTopN(arr);
 
   candidatesTopN = trackedTopN.slice(0, CONFIG.CANDIDATE_LIMIT);
@@ -1050,6 +1179,7 @@ function buildTrackedTopN() {
   updatePinBadge();
   updateHiddenBadge();
 
+  // ✅ 背景補齊：Top10 內的幣補 klines/OI/VP（不再是進Top10的前置）
   for (const sym of candidatesTopN) {
     ensureKlinesAndOI(sym);
     refreshTodayVP(sym);
@@ -1060,24 +1190,23 @@ function buildTrackedTopN() {
 }
 
 /* ===========================
-   Summary to AI (+ BTC RS fields)
+   Summary to AI (加入 LIQ + BTC RS)
 =========================== */
 function buildSummary(sym) {
   const s = symState[sym];
   if (!s) return null;
 
   const vzEff = (s.volZ5m !== null) ? s.volZ5m : s.volZcs;
+
   const vp = s.vpToday;
-
-  const btc = symState[BTC_SYM];
-  const btcRet = btc?.ret5mPct ?? null;
-  const rs = (btcRet !== null && s.ret5mPct !== null) ? (s.ret5mPct - btcRet) : null;
-
   return {
     symbol: s.symbol,
     price: s.price,
 
     ret5m_pct: s.ret5mPct,
+    btc_ret5m_pct: btcState.ret5mPct,
+    rs_vs_btc_5m: s.rsVsBtc5m,
+
     vol5m_notional: s.vol5mNotional,
     volZ_5m: vzEff,
 
@@ -1090,16 +1219,18 @@ function buildSummary(sym) {
     oi_delta_5m: s.oiDelta5m,
     oi_delta_4h: s.oiDelta4h,
 
+    liquidation_5m: {
+      notional: s.liq5mNotional,
+      delta: s.liq5mDelta,
+      z_cs: s.liqZcs
+    },
+
     atr14: s.atr14,
     swing_low_20: s.swingLow20,
     swing_high_20: s.swingHigh20,
     range_20_pct: s.range20Pct,
     sma20: s.sma20,
     dist_sma20_atr: s.distSma20Atr,
-
-    // ✅ BTC 相對強弱
-    btc_ret5m_pct: btcRet,
-    rs_vs_btc_5m: rs,
 
     today_vp: vp ? {
       poc: vp.poc,
@@ -1120,7 +1251,175 @@ function buildSummary(sym) {
 }
 
 /* ===========================
-   ✅ Precise TP algorithm (unchanged)
+   ✅ Robust JSON parsing for Groq content
+=========================== */
+function extractFirstJSONObject(text) {
+  if (!text) return null;
+
+  let s = String(text).trim();
+  s = s.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+
+  try {
+    const obj = JSON.parse(s);
+    if (obj && typeof obj === "object") return obj;
+  } catch {}
+
+  const start = s.indexOf("{");
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    } else {
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === "{") depth++;
+      if (ch === "}") depth--;
+      if (depth === 0) {
+        const candidate = s.slice(start, i + 1);
+        try {
+          const obj = JSON.parse(candidate);
+          if (obj && typeof obj === "object") return obj;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+async function groqChatCompletion({ apiKey, model, messages, maxOut = 400 }) {
+  const url = "https://api.groq.com/openai/v1/chat/completions";
+  const payload = {
+    model,
+    messages,
+    temperature: 0.15,
+    top_p: 0.9,
+    max_completion_tokens: maxOut,
+    response_format: { type: "json_object" }
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type":"application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify(payload)
+  });
+
+  const raw = await res.text();
+  console.log("[Groq] HTTP", res.status, raw);
+
+  if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw.slice(0,300)}`);
+
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error("Groq 回應不是 JSON（外層）"); }
+
+  const content = data?.choices?.[0]?.message?.content ?? "";
+  const obj = extractFirstJSONObject(content);
+
+  if (!obj) {
+    console.warn("[Groq] content not JSON:", content);
+    throw new Error("模型 content 不是有效 JSON");
+  }
+
+  return obj;
+}
+
+/* ===========================
+   AI prompts（已加入 BTC/LIQ 欄位，但不強迫使用）
+=========================== */
+function buildAiPrompt(top10Summaries) {
+  const system = `
+你是加密合約「只做多」交易助手。請全部用中文輸出。
+你只看到輸入摘要（不可假裝看K線圖/深度/新聞）。
+任務：從 candidates(Top10) 中選出 top5，找「10~60分鐘內可能向上表態」且「不追價」，偏 5K 小波段。
+
+額外加分邏輯（請在 reasons 裡說明）：
+- BTC(5m) 下跌時，若某幣 rs_vs_btc_5m > 0（抗跌/逆勢上漲）可加分
+- liquidation_5m.delta > 0 且 liquidation_5m.z_cs 高：可能爆空推升（嘎空）→加分
+- liquidation_5m.delta < 0：多殺多風險 → 降低信心/改成等待回踩
+
+輸出必須是單一 JSON 物件（不要任何多餘文字）。
+JSON 格式：
+{
+  "top5":[
+    {
+      "symbol":"XXXUSDT",
+      "score":0-100,
+      "confidence":0-100,
+      "eta_minutes":"10-30"|"30-60"|"60-120",
+      "stage":"蓄勢"|"點火"|"觸發"|"追價風險",
+      "entry":{"type":"limit"|"market","zone":[low,high],"trigger":"...","logic":"..."},
+      "stop":{"price":number,"logic":"..."},
+      "takeProfit":[{"price":number,"pct":number,"logic":"..."}],
+      "invalidation":"...",
+      "reasons":["..."],
+      "risks":["..."]
+    }
+  ]
+}
+  `.trim();
+
+  const user = {
+    mode: "LONG_ONLY",
+    note: "候選已排除 XAU/XAG/外匯、也排除大幣；資料屬 5K 小波段；含 BTC/LIQ 對比欄位。",
+    candidates: top10Summaries
+  };
+
+  return [
+    { role:"system", content: system },
+    { role:"user", content: JSON.stringify(user) }
+  ];
+}
+
+function buildAiPromptSingle(symbol, currentSummary, prevAdvice) {
+  const system = `
+你是加密合約「只做多」交易助手。請全部用中文輸出。
+你會收到 current（最新摘要）與 previous（上一次建議）。
+任務：針對同一幣種，基於 current 與 previous 的差異，輸出更新後的建議（偏 5K 小波段）。
+若 BTC 下跌且 rs_vs_btc_5m > 0，可提高信心；若 liquidation_5m.delta < 0 且 z_cs 高，需保守。
+
+輸出必須是單一 JSON 物件（不要多餘文字）：
+{
+  "symbol":"XXXUSDT",
+  "score":0-100,
+  "confidence":0-100,
+  "eta_minutes":"10-30"|"30-60"|"60-120",
+  "stage":"蓄勢"|"點火"|"觸發"|"追價風險",
+  "entry":{"type":"limit"|"market","zone":[low,high],"trigger":"...","logic":"..."},
+  "stop":{"price":number,"logic":"..."},
+  "takeProfit":[{"price":number,"pct":number,"logic":"..."}],
+  "invalidation":"...",
+  "reasons":["..."],
+  "risks":["..."]
+}
+  `.trim();
+
+  const user = { mode:"LONG_ONLY", symbol, current: currentSummary, previous: prevAdvice || null };
+
+  return [
+    { role:"system", content: system },
+    { role:"user", content: JSON.stringify(user) }
+  ];
+}
+
+function stageClass(stage) {
+  if (stage === "蓄勢") return "stage-setup";
+  if (stage === "點火") return "stage-ignite";
+  if (stage === "觸發") return "stage-confirm";
+  if (stage === "追價風險") return "stage-chase";
+  return "stage-cool";
+}
+
+/* ===========================
+   Normalize (保留你原本 TP/R 概念作 fallback)
 =========================== */
 function uniqNums(arr) {
   const out = [];
@@ -1179,174 +1478,17 @@ function computePreciseTPs(summary, entry, stop) {
     entryMid,
     R,
     tps: [
-      { price: Number(targets[0].toFixed(12)), pct: 35, logic: `TP1 ≥ ${ks[0]}R，優先對齊阻力(VP/節點/前高)，R=${R.toFixed(6)}` },
-      { price: Number(targets[1].toFixed(12)), pct: 35, logic: `TP2 ≥ ${ks[1]}R，優先對齊更遠阻力或延伸` },
-      { price: Number(targets[2].toFixed(12)), pct: 30, logic: `TP3 ≥ ${ks[2]}R，波段延伸段（可改追蹤止損）` }
+      { price: Number(targets[0].toFixed(12)), pct: 35, logic: `TP1 ≥ ${ks[0]}R（優先阻力：VP/節點/前高）` },
+      { price: Number(targets[1].toFixed(12)), pct: 35, logic: `TP2 ≥ ${ks[1]}R（優先更遠阻力或延伸）` },
+      { price: Number(targets[2].toFixed(12)), pct: 30, logic: `TP3 ≥ ${ks[2]}R（波段延伸段）` }
     ]
   };
 }
 
-/* ===========================
-   Groq AI (gpt-oss safe payload)
-=========================== */
-async function groqChatCompletion({ apiKey, model, messages, maxOut = 400 }) {
-  const url = "https://api.groq.com/openai/v1/chat/completions";
-  const isOss = String(model || "").includes("gpt-oss");
-
-  const payload = {
-    model,
-    messages,
-    temperature: 0.15,
-    top_p: 0.9,
-    max_completion_tokens: maxOut,
-    ...(isOss ? {} : { response_format: { type: "json_object" } })
-  };
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type":"application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify(payload)
-  });
-
-  const raw = await res.text();
-  console.log("[Groq] HTTP", res.status, raw);
-
-  if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${raw.slice(0,200)}`);
-
-  let data;
-  try { data = JSON.parse(raw); } catch { throw new Error("Groq 回應不是 JSON"); }
-
-  const content = data?.choices?.[0]?.message?.content ?? "";
-  const cleaned = content.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```$/i,"").trim();
-
-  let obj;
-  try { obj = JSON.parse(cleaned); }
-  catch { throw new Error("模型 content 不是有效 JSON: " + cleaned.slice(0,200)); }
-
-  return obj;
-}
-
-/* ===========================
-   AI prompts (add BTC RS note)
-=========================== */
-function buildAiPrompt(top10Summaries) {
-  const system = `
-你是加密合約「只做多」交易助手。請全部用中文輸出。
-你只看到輸入摘要（不可假裝看K線圖/深度/新聞）。
-任務：從 candidates(10) 中選出 top5，找「10~60分鐘內可能向上表態」且「不追價」，偏 5K 小波段。
-
-【BTC 相對強弱】
-輸入含 btc_ret5m_pct 與 rs_vs_btc_5m（=本幣ret5m - BTCret5m）。
-若 BTC 正在下跌，優先挑「rs_vs_btc_5m 明顯為正」的抗跌/逆勢幣，並在 reasons 說明。
-
-【精準止盈硬規則（必須遵守）】
-定義：
-- entry_mid = (entry.zone[0]+entry.zone[1])/2（若 market 用 current.price）
-- R = entry_mid - stop.price（做多，R 必須 > 0）
-阻力集合（只取 entry_mid 上方）：today_vp.poc、today_vp.vah、today_vp.top_nodes[].price、swing_high_20
-規則（5K波段 floor）：
-- TP1 必須 >= entry_mid + 1.3R
-- TP2 必須 >= entry_mid + 2.6R
-- TP3 必須 >= entry_mid + 4.0R
-- 每段 TP 間距 >= max(0.6R, 0.5*atr14)
-選價：
-- 先算 floor_i = entry_mid + k_i*R (k=1.3,2.6,4.0)
-- 在阻力集合中找第一個 >= floor_i 的阻力價，有則用阻力價；否則用 floor_i
-- 並在 takeProfit.logic 寫出：用到哪個阻力或用到 R 倍數
-
-【不追價】
-若 ret5m_pct 過高或 dist_sma20_atr 太大，entry 必須改為等待回踩的 limit zone，不可追價。
-
-輸出必須是單一 JSON 物件（不要任何多餘文字）。
-JSON 格式：
-{
-  "top5":[
-    {
-      "symbol":"XXXUSDT",
-      "score":0-100,
-      "confidence":0-100,
-      "eta_minutes":"10-30"|"30-60"|"60-120",
-      "stage":"蓄勢"|"點火"|"觸發"|"追價風險",
-      "entry":{"type":"limit"|"market","zone":[low,high],"trigger":"...","logic":"..."},
-      "stop":{"price":number,"logic":"..."},
-      "takeProfit":[{"price":number,"pct":number,"logic":"..."}],
-      "invalidation":"...",
-      "reasons":["..."],
-      "risks":["..."]
-    }
-  ]
-}
-  `.trim();
-
-  const user = {
-    mode: "LONG_ONLY",
-    note: "候選已排除 XAU/XAG/外匯、也排除大幣；資料屬 5K 小波段；含 BTC 相對強弱欄位。",
-    candidates: top10Summaries
-  };
-
-  return [
-    { role:"system", content: system },
-    { role:"user", content: JSON.stringify(user) }
-  ];
-}
-
-function buildAiPromptSingle(symbol, currentSummary, prevAdvice) {
-  const system = `
-你是加密合約「只做多」交易助手。請全部用中文輸出。
-你會收到 current（最新摘要）與 previous（上一次建議）。
-任務：針對同一幣種，基於 current 與 previous 的差異，輸出更新後的建議（偏 5K 小波段）。
-必須給：score/confidence/eta_minutes/entry/stop/takeProfit/invalidation/reasons/risks
-並參考 current.rs_vs_btc_5m（相對BTC強弱）。
-
-【精準止盈硬規則（必須遵守）】
-- entry_mid = (entry.zone[0]+entry.zone[1])/2（若 market 用 current.price）
-- R = entry_mid - stop.price（做多 R>0）
-阻力集合：today_vp.poc、today_vp.vah、today_vp.top_nodes[].price、swing_high_20（僅取 entry_mid 上方）
-- TP1 >= entry_mid + 1.3R
-- TP2 >= entry_mid + 2.6R
-- TP3 >= entry_mid + 4.0R
-- TP 間距 >= max(0.6R, 0.5*atr14)
-選價：用阻力價優先，否則用 R 倍數 floor；並在 logic 寫明依據。
-
-若 current 顯示追價風險，entry 必須改成等待回踩的 limit zone（不可追價）。
-輸出必須是單一 JSON 物件（不要多餘文字）：
-{
-  "symbol":"XXXUSDT",
-  "score":0-100,
-  "confidence":0-100,
-  "eta_minutes":"10-30"|"30-60"|"60-120",
-  "stage":"蓄勢"|"點火"|"觸發"|"追價風險",
-  "entry":{"type":"limit"|"market","zone":[low,high],"trigger":"...","logic":"..."},
-  "stop":{"price":number,"logic":"..."},
-  "takeProfit":[{"price":number,"pct":number,"logic":"..."}],
-  "invalidation":"...",
-  "reasons":["..."],
-  "risks":["..."]
-}
-  `.trim();
-
-  const user = { mode:"LONG_ONLY", symbol, current: currentSummary, previous: prevAdvice || null };
-
-  return [
-    { role:"system", content: system },
-    { role:"user", content: JSON.stringify(user) }
-  ];
-}
-
-function stageClass(stage) {
-  if (stage === "蓄勢") return "stage-setup";
-  if (stage === "點火") return "stage-ignite";
-  if (stage === "觸發") return "stage-confirm";
-  if (stage === "追價風險") return "stage-chase";
-  return "stage-cool";
-}
-
-/* ===========================
-   Normalize (force TP)
-=========================== */
 function normalizeAiPick(sym, summary, pick) {
   const price = summary.price || 0;
   const atr = (summary.atr14 && summary.atr14 > 0) ? summary.atr14 : (price * 0.002);
+
   const safe = (x, fallback) => (x === null || x === undefined || Number.isNaN(x)) ? fallback : x;
 
   const out = {
@@ -1381,37 +1523,17 @@ function normalizeAiPick(sym, summary, pick) {
   if (!out.stop) {
     const low = summary.swing_low_20 || (price - 2*atr);
     const stopPrice = (low - 0.4 * atr);
-    out.stop = { price: Number(stopPrice.toFixed(12)), logic: "5K swing low 下方 + 0.4ATR 作失效點" };
+    out.stop = { price: Number(stopPrice.toFixed(12)), logic: "swing low 下方 + 0.4ATR 作失效點" };
   } else {
     out.stop.price = Number(out.stop.price);
   }
 
-  const tpNeedFix = (() => {
-    if (!out.takeProfit || out.takeProfit.length < 3) return true;
-    const entryMid = (out.entry?.zone?.length === 2) ? ((Number(out.entry.zone[0]) + Number(out.entry.zone[1]))/2) : price;
-    const R = entryMid - Number(out.stop?.price);
-    if (!isFinite(R) || R <= 0) return true;
-
-    const ks = CONFIG.TP_K;
-    const tps = out.takeProfit.map(x => Number(x.price)).filter(x=>isFinite(x)).sort((a,b)=>a-b);
-    if (tps.length < 3) return true;
-
-    if (tps[0] < entryMid + ks[0]*R) return true;
-    if (tps[1] < entryMid + ks[1]*R) return true;
-    if (tps[2] < entryMid + ks[2]*R) return true;
-
-    const minStep = Math.max(0.6*R, 0.5*(summary.atr14 || atr || 0));
-    if (tps[1] - tps[0] < minStep) return true;
-    if (tps[2] - tps[1] < minStep) return true;
-
-    return false;
-  })();
-
-  if (tpNeedFix) {
+  // 若 AI 沒給 3 段 TP 或格式不完整，套 fallback
+  if (!out.takeProfit || out.takeProfit.length < 3) {
     const tpPack = computePreciseTPs(summary, out.entry, out.stop);
     out.takeProfit = tpPack.tps;
     out.reasons = (out.reasons || []);
-    out.reasons.unshift(`已套用5K波段精準止盈：floor=${CONFIG.TP_K.join("/") }R + 阻力(VP/節點/前高)，R=${tpPack.R.toFixed(6)}`);
+    out.reasons.unshift(`已套用 fallback 止盈：${CONFIG.TP_K.join("/") }R + 阻力(VP/節點/前高)`);
   } else {
     out.takeProfit = out.takeProfit
       .map(tp => ({ price: Number(tp.price), pct: Number(tp.pct ?? 0), logic: String(tp.logic ?? "") }))
@@ -1420,7 +1542,7 @@ function normalizeAiPick(sym, summary, pick) {
   }
 
   if (!out.invalidation) out.invalidation = "跌破 stop 或 5m 主動買差額轉負且量能退潮";
-  if (!out.reasons.length) out.reasons = ["候選池內異常分數較高（量能/主動買/OI/相對BTC/反追價綜合）"];
+  if (!out.reasons.length) out.reasons = ["候選池內綜合分數較高（量能/主動買/OI/LIQ/BTC RS）"];
   if (!out.risks.length) out.risks = ["若 5m 漲幅快速擴大屬追價風險，需等回踩再進"];
 
   return out;
@@ -1439,7 +1561,7 @@ async function runAIOnce(force=false) {
 
   const poolSyms = candidatesTopN.slice(0, CONFIG.AI_INPUT_SIZE);
   if (poolSyms.length < CONFIG.MIN_AI_POOL) {
-    setStatus("aiStatus", `等待 Top10 成形（目前 ${poolSyms.length}/${CONFIG.MIN_AI_POOL}）`, "warn");
+    setStatus("aiStatus", `等待 TopN 成形（目前 ${poolSyms.length}/${CONFIG.MIN_AI_POOL}）`, "warn");
     return;
   }
 
@@ -1521,7 +1643,7 @@ async function runAIOnce(force=false) {
       aiBackoffUntil = Date.now() + 45*1000;
       setStatus("aiStatus", "AI 429 限流，backoff 45s", "bad");
     } else {
-      setStatus("aiStatus", "AI FAIL: " + msg.slice(0,80), "bad");
+      setStatus("aiStatus", "AI FAIL: " + msg.slice(0,120), "bad");
     }
   }
 }
@@ -1579,9 +1701,9 @@ async function testAI() {
     const obj = await groqChatCompletion({
       apiKey: key,
       model,
-      maxOut: 160,
+      maxOut: 180,
       messages: [
-        { role:"system", content:"只輸出 JSON 物件，不要任何多餘文字。" },
+        { role:"system", content:"只輸出 JSON 物件，不要任何多餘文字。輸出格式：{\"status\":\"pong\"}" },
         { role:"user", content: JSON.stringify({ ping:"pong", now: Date.now() }) }
       ]
     });
@@ -1709,8 +1831,12 @@ function renderTop5Cards() {
     const vpNodes = vp?.top_nodes ? vp.top_nodes.map(n=>`${fmt(n.price,6)}(${fmt(n.vol_pct,1)}%)`).join(" / ") : "-";
 
     const warmMin = sum?.warmup_minutes ?? "-";
-    const rsBtc = sum?.rs_vs_btc_5m;
-    const rsLine = (rsBtc === null || rsBtc === undefined) ? "-" : `${fmt(rsBtc,2)}%`;
+    const rsLine = (sum?.rs_vs_btc_5m !== null && sum?.rs_vs_btc_5m !== undefined)
+      ? `RSvsBTC:${fmt(sum.rs_vs_btc_5m,2)}% (BTC:${fmt(sum.btc_ret5m_pct,2)}%)`
+      : "-";
+
+    const liq = sum?.liquidation_5m;
+    const liqLine = liq ? `LIQ5m N:${fmt(liq.notional,0)} Δ:${fmt(liq.delta,0)} Z:${fmt(liq.z_cs,2)}` : "-";
 
     const card = document.createElement("div");
     card.className = `card p-4 ${isTop1 ? "card-top1" : ""}`;
@@ -1732,14 +1858,14 @@ function renderTop5Cards() {
                 <span class="mx-2 muted">|</span>
                 5m漲跌: <b class="${(sum?.ret5m_pct||0)>=0 ? "ok":"bad"}">${fmt(sum?.ret5m_pct,2)}%</b>
                 <span class="mx-2 muted">|</span>
-                RS vs BTC(5m): <b class="${(rsBtc||0)>=0 ? "ok":"bad"}">${rsLine}</b>
-                <span class="mx-2 muted">|</span>
                 前端分: <b>${fmt(sum?.preScore,0)}</b>
                 <span class="mx-2 muted">|</span>
                 熱機: <b>${warmMin}m</b>
                 <span class="mx-2 muted">|</span>
                 K: <b>${sum?.kline_interval || "-"}</b>
               </div>
+              <div class="tiny muted mt-1">BTC對比：<b>${rsLine}</b></div>
+              <div class="tiny muted mt-1">強平：<b>${liqLine}</b></div>
               <div class="tiny mt-2 ${stageClass(stage)} font-bold">階段：${stage}</div>
             </div>
           </div>
@@ -1756,8 +1882,8 @@ function renderTop5Cards() {
             <div class="kv tiny">資金費率(%): <b>${fmt(sum?.funding_pct,3)}</b> / premium(%): <b>${fmt(sum?.premium_pct,3)}</b></div>
 
             <div class="kv tiny">ATR14(5K): <b>${fmt(sum?.atr14,6)}</b></div>
-            <div class="kv tiny">SwingLow(窗口): <b>${fmt(sum?.swing_low_20,6)}</b></div>
-            <div class="kv tiny">SwingHigh(窗口): <b>${fmt(sum?.swing_high_20,6)}</b></div>
+            <div class="kv tiny">SwingLow: <b>${fmt(sum?.swing_low_20,6)}</b></div>
+            <div class="kv tiny">SwingHigh: <b>${fmt(sum?.swing_high_20,6)}</b></div>
 
             <div class="kv tiny">Range(%): <b>${fmt(sum?.range_20_pct,2)}</b></div>
             <div class="kv tiny">distSMA20/ATR: <b>${fmt(sum?.dist_sma20_atr,2)}</b></div>
@@ -1849,11 +1975,12 @@ async function boot() {
   setStatus("binStatus","初始化…","warn");
   setStatus("aiStatus","-","muted");
   setStatus("vpStatus","-","muted");
+  setStatus("liqStatus","-","muted");
+  setStatus("btcStatus","-","muted");
 
   startMiniTicker();
-
-  // ✅ BTC baseline
-  ensureBTC();
+  startLiquidationFeed();
+  startBtcFeed();
 
   await refreshExchangeInfo().catch(()=>{});
   await refreshPremiumAll().catch(()=>{});
@@ -1867,6 +1994,7 @@ async function boot() {
     if (aiTop5.length) renderTop5Cards();
   }, CONFIG.CANDIDATE_REFRESH_MS);
 
+  // 背景補：Top10 的 klines/OI/VP
   setInterval(() => {
     for (const sym of candidatesTopN) ensureKlinesAndOI(sym);
   }, 60*1000);
@@ -1876,7 +2004,7 @@ async function boot() {
   }, CONFIG.VP_REFRESH_MS);
 
   setInterval(() => runAIOnce(false), 1500);
-  setTimeout(() => runAIOnce(true), 9000); // ✅ 更快啟動
+  setTimeout(() => runAIOnce(true), 12000);
 }
 
 boot();
